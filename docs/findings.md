@@ -193,7 +193,29 @@ Settlement can fail in these ways:
 | [First-ever tick crossing at the floor](https://explorer.altmempool.wtf/tx/0xf07043e05acd0805b2af5dd2ed089ed61b7ea7f35d1e12732feca5dbee4b2b72) | Settlement needs new slots and declared none | Live: **user call landed free, paymaster lost 0.000466 ETH** (about 1.11 fgUSD) |
 | [Pool too thin to supply the reserve](https://explorer.altmempool.wtf/tx/0x458ed9b60820efb820ebcc0bd9d1cf8aa8a2675c23e44fbe477b3195707b7524) | The paymaster was deployed on a thin pool | Live: user call landed free, paymaster lost 0.000466 ETH |
 
-**The cost of griefing depends on pool depth.** With 5e13 of active liquidity, close to the devnet pool's, moving the price 480 ticks and back takes about 59 fgUSD of capital and costs about 0.35 fgUSD in fees. That is below the 1.11 fgUSD measured loss, and far below the 4.77 fgUSD limit. The cost grows in proportion to liquidity, so it passes that limit at roughly 14 times this depth, about 4 ETH of liquidity in this range. Ordering the two transactions in one block also needs a builder's cooperation, which we did not test. The paymaster should only be deployed on a deep pool.
+### Griefing economics
+
+A staked paymaster that reads a pool during validation can be griefed by moving the pool. This applies to any alt-mempool paymaster priced from an AMM, and the numbers suggest a design rule: **an entity's validation should require enough active liquidity that moving the price costs more than the gas it can destroy.**
+
+| | Measured at 5e13 active liquidity |
+| --- | --- |
+| Capital to move the price 480 ticks | about 59 fgUSD |
+| Fees to move it there and back (attacker's cost) | about 0.35 fgUSD |
+| Paymaster's loss, measured live | about 1.11 fgUSD (0.000466 ETH) |
+| Paymaster's loss at the per-transaction limit | about 4.77 fgUSD (0.002 ETH) |
+| Loss per unit of attacker cost | 3.2x, up to 13.6x at the limit |
+
+The attacker's cost grows in proportion to active liquidity, while the loss does not:
+
+| Active liquidity | Depth in this range | Attacker cost | Against 1.11 fgUSD loss | Against 4.77 fgUSD limit |
+| --- | --- | --- | --- | --- |
+| 5e13 | about 0.3 ETH | 0.35 fgUSD | Profitable to grief | Profitable to grief |
+| 1.6e14 | about 0.9 ETH | 1.11 fgUSD | Break-even | Profitable to grief |
+| 7e14 (14x) | about 4 ETH | 4.9 fgUSD | Unprofitable | Unprofitable |
+
+Only the first row is measured. The others scale it. The attacker also needs both transactions ordered in one block, which needs a builder's cooperation and was not tested, so these figures favour the attacker.
+
+`FrameGasPaymaster` enforces this with `MIN_LIQUIDITY`, set per deployment. **The devnet uses 1e12, a demo threshold. The production floor is about 7e14, roughly 4 ETH of depth.** Validation checks liquidity at admission only, so someone could remove it afterwards, but that is their own capital and hits the same economics. The check adds about 2,500 gas to validation.
 
 ### Gas by ticks crossed
 

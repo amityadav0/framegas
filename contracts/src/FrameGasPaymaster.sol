@@ -54,6 +54,8 @@ contract FrameGasPaymaster is HegotaSupport(Devnet.ERC8421_WORKSHOP), IUnlockCal
     /// @param minApproveStateGas The state gas limit a bootstrap approve frame must declare.
     /// @param approveNeedsZero Whether the token rejects changing a nonzero allowance, as USDT does.
     /// @param maxTxCostWei The largest maximum cost accepted, which bounds what one transaction can cost this contract.
+    /// @param minLiquidity The active liquidity validation requires. Moving a thin pool past the quote buffer costs less
+    /// in fees than the gas it can make this contract lose. See docs/findings.md for the depth where that flips.
     /// @param refundGasEstimate The gas charged for a refund frame with no frames before it. It cannot read its own gas
     /// used, and `REFUND_GAS_PER_FRAME` is added for each frame before it.
     struct Config {
@@ -73,6 +75,7 @@ contract FrameGasPaymaster is HegotaSupport(Devnet.ERC8421_WORKSHOP), IUnlockCal
         uint256 minApproveStateGas;
         bool approveNeedsZero;
         uint256 maxTxCostWei;
+        uint128 minLiquidity;
         uint256 refundGasEstimate;
     }
 
@@ -123,6 +126,8 @@ contract FrameGasPaymaster is HegotaSupport(Devnet.ERC8421_WORKSHOP), IUnlockCal
     bool public immutable APPROVE_NEEDS_ZERO;
     /// @notice The largest maximum cost accepted.
     uint256 public immutable MAX_TX_COST_WEI;
+    /// @notice The active liquidity validation requires.
+    uint128 public immutable MIN_LIQUIDITY;
     /// @notice The gas charged for a refund frame with no frames before it.
     uint256 public immutable REFUND_GAS_ESTIMATE;
 
@@ -167,6 +172,8 @@ contract FrameGasPaymaster is HegotaSupport(Devnet.ERC8421_WORKSHOP), IUnlockCal
     error ApproveGasTooLow(uint256 gasLimit, uint256 stateGasLimit);
     /// @dev A permit is not accepted alongside a bootstrap approve frame.
     error PermitWithBootstrap();
+    /// @dev The pool's active liquidity is below `MIN_LIQUIDITY`, so griefing would cost less than it destroys.
+    error PoolTooThin(uint128 liquidity, uint128 minLiquidity);
     /// @dev The transaction's maximum cost is above `MAX_TX_COST_WEI`.
     error MaxCostTooHigh(uint256 maxCost, uint256 limit);
     /// @dev The permit in the settle frame would not succeed on the token.
@@ -217,6 +224,7 @@ contract FrameGasPaymaster is HegotaSupport(Devnet.ERC8421_WORKSHOP), IUnlockCal
         MIN_APPROVE_STATE_GAS = config.minApproveStateGas;
         APPROVE_NEEDS_ZERO = config.approveNeedsZero;
         MAX_TX_COST_WEI = config.maxTxCostWei;
+        MIN_LIQUIDITY = config.minLiquidity;
         REFUND_GAS_ESTIMATE = config.refundGasEstimate;
         refTick = tick;
         lastSyncBlock = uint64(block.number);
@@ -246,6 +254,8 @@ contract FrameGasPaymaster is HegotaSupport(Devnet.ERC8421_WORKSHOP), IUnlockCal
         (uint160 sqrtPriceX96, int24 tick,,) = POOL_MANAGER.getSlot0(POOL_ID);
         int24 ref = refTick;
         if (_distance(tick, ref) > uint24(MAX_DEVIATION)) revert TickDeviated(tick, ref);
+        uint128 liquidity = POOL_MANAGER.getLiquidity(POOL_ID);
+        if (liquidity < MIN_LIQUIDITY) revert PoolTooThin(liquidity, MIN_LIQUIDITY);
 
         uint256 tokenCost = _quote(maxCost, sqrtPriceX96);
         if (tokenCost > maxTokenCost) revert CostAboveCap(tokenCost, maxTokenCost);

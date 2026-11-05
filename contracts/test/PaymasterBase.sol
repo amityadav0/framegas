@@ -51,6 +51,8 @@ abstract contract PaymasterBase is FrameMocks {
     uint256 internal constant MIN_APPROVE_GAS = 30_000;
     uint256 internal constant MIN_APPROVE_STATE = 97_920;
     uint256 internal constant MAX_TX_COST = 0.005 ether;
+    uint128 internal constant POOL_LIQUIDITY = 5e13;
+    uint128 internal constant MIN_LIQUIDITY = 1e13;
     uint256 internal constant REFUND_ESTIMATE = 250_000;
     uint160 internal constant SQRT_PRICE = 3870497721706919791279764;
     uint256 internal constant MAX_S = 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0;
@@ -101,7 +103,7 @@ abstract contract PaymasterBase is FrameMocks {
         swapper = new PoolSwapTest(manager);
         token.approve(address(lp), type(uint256).max);
         token.approve(address(swapper), type(uint256).max);
-        lp.modifyLiquidity{value: 100 ether}(key, ModifyLiquidityParams(-204600, -192600, 5e13, 0), "");
+        lp.modifyLiquidity{value: 100 ether}(key, ModifyLiquidityParams(-204600, -192600, int256(uint256(POOL_LIQUIDITY)), 0), "");
 
         paymaster = _deploy(STAKE, REFUND_ESTIMATE);
         (txp, fp, data) = etchFrameMocks(address(paymaster));
@@ -130,6 +132,7 @@ abstract contract PaymasterBase is FrameMocks {
                 minApproveStateGas: MIN_APPROVE_STATE,
                 approveNeedsZero: false,
                 maxTxCostWei: MAX_TX_COST,
+                minLiquidity: MIN_LIQUIDITY,
                 refundGasEstimate: refundEstimate
             })
         );

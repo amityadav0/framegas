@@ -23,8 +23,8 @@ export const STATE_GAS_PER_SLOT = 97_920n;
  */
 export const LIMITS = {
   sender: 200n,
-  validate: 46_000n,
-  validateBootstrap: 51_000n,
+  validate: 49_000n,
+  validateBootstrap: 54_000n,
   settle: 150_000n,
   settleState: 0n,
   settlePermitState: 3n * STATE_GAS_PER_SLOT,
@@ -36,11 +36,18 @@ export const LIMITS = {
 /** The refund frame's limit, matching the contract's estimate: `framesBefore` is the frames preceding it. */
 export const refundLimit = (framesBefore: bigint): bigint => LIMITS.refundBase + framesBefore * 5_500n;
 
+/**
+ * Demo threshold, low enough for the devnet's small pool. Griefing stops being profitable at about 7e14 of active
+ * liquidity, about 4 ETH of depth in this range, which is the production floor. See docs/findings.md.
+ */
+export const DEMO_MIN_LIQUIDITY = 1_000_000_000_000n;
+
 export interface PaymasterParams {
   fee?: number;
   tickSpacing?: number;
   maxTxCostEth?: string;
   floatEth?: string;
+  minLiquidity?: bigint;
 }
 
 export async function deployPaymaster(key: Hex, fgUSD: Address, p: PaymasterParams = {}): Promise<Address> {
@@ -62,6 +69,7 @@ export async function deployPaymaster(key: Hex, fgUSD: Address, p: PaymasterPara
     minApproveStateGas: LIMITS.approveState,
     approveNeedsZero: false,
     maxTxCostWei: parseEther(p.maxTxCostEth ?? "0.002"),
+    minLiquidity: p.minLiquidity ?? DEMO_MIN_LIQUIDITY,
     refundGasEstimate: LIMITS.refundBase,
   };
   return deploy(key, "FrameGasPaymaster", [config], stake + parseEther(p.floatEth ?? "0.02"), 25_000_000n);

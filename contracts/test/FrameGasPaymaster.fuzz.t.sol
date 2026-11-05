@@ -263,6 +263,7 @@ contract FrameGasPaymasterFuzz is PaymasterBase {
                 minApproveStateGas: 0,
                 approveNeedsZero: false,
                 maxTxCostWei: MAX_TX_COST,
+                minLiquidity: 0,
                 refundGasEstimate: 2_000_000
             })
         );

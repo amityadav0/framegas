@@ -41,6 +41,7 @@ contract FrameGasPaymasterTest is PaymasterBase {
             minApproveStateGas: 0,
             approveNeedsZero: false,
             maxTxCostWei: 0,
+            minLiquidity: 0,
             refundGasEstimate: 0
         });
         vm.expectRevert(FrameGasPaymaster.PoolNotInitialized.selector);
@@ -123,6 +124,69 @@ contract FrameGasPaymasterTest is PaymasterBase {
             abi.encodeWithSelector(FrameGasPaymaster.MaxCostTooHigh.selector, MAX_TX_COST + 1, MAX_TX_COST)
         );
         paymaster.validate();
+    }
+
+    function test_validateAcceptsLiquidityExactlyAtTheMinimum() public {
+        FrameGasPaymaster.Config memory config = _config(POOL_LIQUIDITY);
+        FrameGasPaymaster exact = new FrameGasPaymaster{value: FLOAT}(config);
+        _useInstead(exact);
+        _expectApprove();
+        exact.validate();
+    }
+
+    function test_validateRejectsAPoolBelowTheMinimumLiquidity() public {
+        FrameGasPaymaster.Config memory config = _config(POOL_LIQUIDITY + 1);
+        FrameGasPaymaster strict = new FrameGasPaymaster{value: FLOAT}(config);
+        _useInstead(strict);
+        vm.expectRevert(
+            abi.encodeWithSelector(FrameGasPaymaster.PoolTooThin.selector, POOL_LIQUIDITY, POOL_LIQUIDITY + 1)
+        );
+        strict.validate();
+    }
+
+    /// @dev Active liquidity is what counts. A price moved out of every position has none.
+    function test_validateRejectsAPriceOutsideAllLiquidity() public {
+        FrameGasPaymaster wide = new FrameGasPaymaster{value: FLOAT}(_wideConfig());
+        _useInstead(wide);
+        _moveTickTo(-192600 + 120);
+        vm.expectRevert(abi.encodeWithSelector(FrameGasPaymaster.PoolTooThin.selector, uint128(0), MIN_LIQUIDITY));
+        wide.validate();
+    }
+
+    function _wideConfig() internal view returns (FrameGasPaymaster.Config memory config) {
+        config = _config(MIN_LIQUIDITY);
+        config.maxDeviation = 100_000;
+    }
+
+    function _config(uint128 minLiquidity) internal view returns (FrameGasPaymaster.Config memory) {
+        return FrameGasPaymaster.Config({
+            poolManager: manager,
+            registry: registry,
+            payToken: IERC20(address(token)),
+            fee: FEE,
+            tickSpacing: SPACING,
+            maxDeviation: MAX_DEVIATION,
+            bufferBps: BUFFER_BPS,
+            stakeAmount: 0,
+            unstakeDelaySec: 0,
+            minSettleGas: MIN_SETTLE_GAS,
+            minSettleStateGas: MIN_SETTLE_STATE,
+            minSettlePermitStateGas: MIN_SETTLE_PERMIT_STATE,
+            minApproveGas: MIN_APPROVE_GAS,
+            minApproveStateGas: MIN_APPROVE_STATE,
+            approveNeedsZero: false,
+            maxTxCostWei: MAX_TX_COST,
+            minLiquidity: minLiquidity,
+            refundGasEstimate: REFUND_ESTIMATE
+        });
+    }
+
+    function _useInstead(FrameGasPaymaster other) internal {
+        paymaster = other;
+        (txp, fp, data) = etchFrameMocks(address(other));
+        vm.prank(user);
+        token.approve(address(other), type(uint256).max);
+        _standardTx(_settleData(CAP, 0, 0, 0));
     }
 
     // ---- validation: bootstrap mode ------------------------------------------------------------------------------
