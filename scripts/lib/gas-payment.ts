@@ -40,6 +40,7 @@ export interface PaymasterParams {
   fee?: number;
   tickSpacing?: number;
   maxTxCostEth?: string;
+  floatEth?: string;
 }
 
 export async function deployPaymaster(key: Hex, fgUSD: Address, p: PaymasterParams = {}): Promise<Address> {
@@ -63,7 +64,7 @@ export async function deployPaymaster(key: Hex, fgUSD: Address, p: PaymasterPara
     maxTxCostWei: parseEther(p.maxTxCostEth ?? "0.002"),
     refundGasEstimate: LIMITS.refundBase,
   };
-  return deploy(key, "FrameGasPaymaster", [config], stake + parseEther("0.02"), 25_000_000n);
+  return deploy(key, "FrameGasPaymaster", [config], stake + parseEther(p.floatEth ?? "0.02"), 25_000_000n);
 }
 
 export const validateData = (): Hex => encodeFunctionData({ abi: paymasterAbi(), functionName: "validate" });
