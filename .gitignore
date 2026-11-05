@@ -1,0 +1,58 @@
+# --- AI assistant instructions & local notes (never committed) ---
+CLAUDE.md
+CLAUDE.local.md
+.claude/
+AGENTS.md
+.cursor/
+.cursorrules
+HANDOFF.md
+notes/
+*.local.md
+
+# --- secrets ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+keystore/
+.secrets/
+
+# --- Foundry ---
+contracts/out/
+contracts/cache/
+contracts/broadcast/*/31337/
+contracts/broadcast/*/1337/
+contracts/broadcast/**/dry-run/
+contracts/lib/**/.git
+out/
+cache/
+
+# --- Node ---
+node_modules/
+.pnpm-store/
+dist/
+build/
+.turbo/
+*.tsbuildinfo
+.next/
+coverage/
+.eslintcache
+
+# --- CRE / Chainlink ---
+cre/.cre/
+cre/**/node_modules/
+cre/**/*.wasm
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# --- misc ---
+*.log
+tmp/
+.cache/
