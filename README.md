@@ -18,6 +18,15 @@ await framegas.send({
 
 One signature. The user holds zero ETH. If gas would exceed `maxTokenCost`, validation fails and nothing moves.
 
+## Design trade-offs
+
+- **Working capital, not a sponsor treasury.** `APPROVE` collects the transaction's maximum cost from the paymaster before any execution frame runs, so it must already hold ETH. Each transaction's swap is designed to refill what that transaction spent. Anyone can top the balance up, and no operator controls it.
+- **The stake is locked for good.** The paymaster has no owner, so nothing can call `unlockStake`. Stake is the price of reading pool state during validation.
+- **One paymaster per token and pool.** Fixing both at deployment stops anyone pointing the paymaster at a thin pool they control. A new token needs a new deployment and stake.
+- **A pool move can evict pending transactions.** Pending transactions that depend on a slot are revalidated when it changes, so a swap that moves the tick past `maxDeviation`, or the quote past a user's `maxTokenCost`, evicts them. `maxDeviation` is set wide (1,000 ticks, about 10.5%) so ordinary swaps do not.
+- **The reference tick can be dragged, slowly.** Validation cannot read the block number, so it compares the pool's tick with a tick in the paymaster's own storage. If the market moves past `maxDeviation`, validation fails until the reference catches up, so anyone can call `syncReference()`. It moves at most `maxDeviation` per block, which makes dragging it cost sustained capital.
+- **Validation gas is shared.** The devnet caps the whole validation prefix at 100,000 gas, so the paymaster keeps its checks small. See [`docs/findings.md`](./docs/findings.md).
+
 ## Layout
 
 | Path | What |
