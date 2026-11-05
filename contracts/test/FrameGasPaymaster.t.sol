@@ -3,208 +3,14 @@ pragma solidity 0.8.28;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
-import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
-import {PoolModifyLiquidityTest} from "@uniswap/v4-core/src/test/PoolModifyLiquidityTest.sol";
-import {PoolSwapTest} from "@uniswap/v4-core/src/test/PoolSwapTest.sol";
-import {ModifyLiquidityParams, SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import {StateLibrary} from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
-import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
-import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
-import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {FgUSD} from "../src/FgUSD.sol";
 import {FrameGasPaymaster} from "../src/FrameGasPaymaster.sol";
-import {IStakingRegistry} from "../src/IStakingRegistry.sol";
-import {FrameMocks, MockFrameDataLoad, MockFrameParam, MockTxParam} from "./FrameMocks.sol";
+import {MockFrameDataLoad, MockFrameParam, MockTxParam} from "./FrameMocks.sol";
+import {PaymasterBase} from "./PaymasterBase.sol";
 
-contract MockRegistry is IStakingRegistry {
-    mapping(address => uint256) internal stakes;
-    mapping(address => uint32) internal delays;
-
-    function addStake(uint32 unstakeDelaySec) external payable {
-        stakes[msg.sender] += msg.value;
-        delays[msg.sender] = unstakeDelaySec;
-    }
-
-    function getDepositInfo(address account) external view returns (uint256, uint32, uint64) {
-        return (stakes[account], delays[account], 0);
-    }
-}
-
-contract FrameGasPaymasterTest is FrameMocks {
+contract FrameGasPaymasterTest is PaymasterBase {
     using StateLibrary for IPoolManager;
-
-    event Approved(uint256 scope);
-
-    uint24 internal constant FEE = 3000;
-    int24 internal constant SPACING = 60;
-    int24 internal constant MAX_DEVIATION = 1000;
-    uint256 internal constant BUFFER_BPS = 500;
-    uint256 internal constant STAKE = 0.012 ether;
-    uint256 internal constant FLOAT = 0.02 ether;
-    uint256 internal constant MAX_GAS = 700_000;
-    uint256 internal constant MAX_FEE = 2 gwei;
-    uint256 internal constant MAX_COST = MAX_GAS * MAX_FEE;
-    uint256 internal constant CAP = 5e6;
-    uint256 internal constant MIN_SETTLE_GAS = 200_000;
-    uint256 internal constant MIN_SETTLE_STATE = 50_000;
-    uint256 internal constant REFUND_ESTIMATE = 250_000;
-    uint160 internal constant SQRT_PRICE = 3870497721706919791279764;
-    uint256 internal constant MAX_S = 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0;
-
-    uint256 internal constant SECP_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;
-    uint256 internal constant USER_KEY = 0xA11CE;
-
-    uint256 internal constant VERIFY_FRAME = 1;
-    uint256 internal constant SETTLE_FRAME = 2;
-    uint256 internal constant USER_FRAME = 3;
-    uint256 internal constant REFUND_FRAME = 4;
-
-    // Frame parameter ids.
-    uint256 internal constant TARGET = 0;
-    uint256 internal constant GAS_LIMIT = 1;
-    uint256 internal constant MODE = 2;
-    uint256 internal constant STATUS = 5;
-    uint256 internal constant ATOMIC = 7;
-    uint256 internal constant STATE_LIMIT = 9;
-    uint256 internal constant GAS_USED = 10;
-    uint256 internal constant STATE_USED = 11;
-
-    address internal user;
-    IPoolManager internal manager;
-    FgUSD internal token;
-    MockRegistry internal registry;
-    PoolKey internal key;
-    PoolSwapTest internal swapper;
-    FrameGasPaymaster internal paymaster;
-    MockTxParam internal txp;
-    MockFrameParam internal fp;
-    MockFrameDataLoad internal data;
-
-    /// @dev The liquidity and swap routers refund unused ETH to this contract.
-    receive() external payable {}
-
-    function setUp() public {
-        user = vm.addr(USER_KEY);
-        manager = IPoolManager(deployCode("PoolManager.sol:PoolManager", abi.encode(address(this))));
-        token = new FgUSD(1_000_000e6);
-        registry = new MockRegistry();
-        key = PoolKey(Currency.wrap(address(0)), Currency.wrap(address(token)), FEE, SPACING, IHooks(address(0)));
-        manager.initialize(key, SQRT_PRICE);
-
-        PoolModifyLiquidityTest lp = new PoolModifyLiquidityTest(manager);
-        swapper = new PoolSwapTest(manager);
-        token.approve(address(lp), type(uint256).max);
-        token.approve(address(swapper), type(uint256).max);
-        lp.modifyLiquidity{value: 100 ether}(key, ModifyLiquidityParams(-204600, -192600, 5e13, 0), "");
-
-        paymaster = _deploy(STAKE, REFUND_ESTIMATE);
-        (txp, fp, data) = etchFrameMocks(address(paymaster));
-        token.transfer(user, 100e6);
-        vm.prank(user);
-        token.approve(address(paymaster), CAP);
-        _standardTx(_settleData(CAP, 0, 0, 0));
-    }
-
-    function _deploy(uint256 stake, uint256 refundEstimate) internal returns (FrameGasPaymaster) {
-        return new FrameGasPaymaster{value: stake + FLOAT}(
-            FrameGasPaymaster.Config({
-                poolManager: manager,
-                registry: registry,
-                payToken: IERC20(address(token)),
-                fee: FEE,
-                tickSpacing: SPACING,
-                maxDeviation: MAX_DEVIATION,
-                bufferBps: BUFFER_BPS,
-                stakeAmount: stake,
-                unstakeDelaySec: 86400,
-                minSettleGas: MIN_SETTLE_GAS,
-                minSettleStateGas: MIN_SETTLE_STATE,
-                refundGasEstimate: refundEstimate
-            })
-        );
-    }
-
-    function _settleData(uint256 cap, uint8 v, bytes32 r, bytes32 s) internal pure returns (bytes memory) {
-        return abi.encodeCall(FrameGasPaymaster.settle, (cap, v, r, s));
-    }
-
-    /// @dev `[VERIFY sender, VERIFY paymaster, SENDER settle, SENDER user, SENDER refund]`, about to run validation.
-    function _standardTx(bytes memory settleData) internal {
-        txp.set(0x02, uint256(uint160(user)));
-        txp.set(0x04, MAX_FEE);
-        txp.set(0x06, MAX_COST);
-        txp.set(0x09, 5);
-        txp.set(0x0A, VERIFY_FRAME);
-        _frame(0, user, 1, 30_000, 0);
-        _frame(VERIFY_FRAME, address(paymaster), 1, 60_000, 0);
-        _frame(SETTLE_FRAME, address(paymaster), 2, MIN_SETTLE_GAS, MIN_SETTLE_STATE);
-        _frame(USER_FRAME, address(0xCAFE), 2, 50_000, 0);
-        _frame(REFUND_FRAME, address(paymaster), 2, 250_000, 0);
-        data.set(SETTLE_FRAME, settleData);
-    }
-
-    function _frame(uint256 i, address target, uint256 mode, uint256 gasLimit, uint256 stateLimit) internal {
-        fp.set(i, TARGET, uint256(uint160(target)));
-        fp.set(i, MODE, mode);
-        fp.set(i, GAS_LIMIT, gasLimit);
-        fp.set(i, STATE_LIMIT, stateLimit);
-        fp.set(i, ATOMIC, 0);
-    }
-
-    /// @dev What the chain reports once frames before the refund have finished.
-    function _finishFramesBeforeRefund(uint256 settleStatus) internal {
-        uint256[4] memory used = [uint256(100), 45_000, 150_000, 3_000];
-        for (uint256 i = 0; i < 4; i++) {
-            fp.set(i, GAS_USED, used[i]);
-            fp.set(i, STATE_USED, 0);
-            fp.set(i, STATUS, 1);
-        }
-        fp.set(SETTLE_FRAME, STATUS, settleStatus);
-        txp.set(0x0A, REFUND_FRAME);
-        data.set(USER_FRAME, "");
-    }
-
-    function _settleAsChain() internal {
-        // APPROVE collects the maximum cost before any execution frame runs.
-        vm.deal(address(paymaster), address(paymaster).balance - MAX_COST);
-        txp.set(0x0A, SETTLE_FRAME);
-        vm.prank(user);
-        paymaster.settle(CAP, 0, 0, 0);
-    }
-
-    function _permitSig(uint256 signerKey, uint256 value, uint256 nonce, uint256 deadline)
-        internal
-        view
-        returns (uint8, bytes32, bytes32)
-    {
-        bytes32 structHash = keccak256(
-            abi.encode(
-                keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"),
-                user,
-                address(paymaster),
-                value,
-                nonce,
-                deadline
-            )
-        );
-        return vm.sign(signerKey, keccak256(abi.encodePacked("\x19\x01", token.DOMAIN_SEPARATOR(), structHash)));
-    }
-
-    function _moveTickTo(int24 target) internal {
-        (, int24 tick,,) = manager.getSlot0(key.toId());
-        bool zeroForOne = target < tick;
-        swapper.swap{value: zeroForOne ? 50 ether : 0}(
-            key,
-            SwapParams(zeroForOne, -int256(1e30), TickMath.getSqrtPriceAtTick(target)),
-            PoolSwapTest.TestSettings(false, false),
-            ""
-        );
-    }
-
-    function _expectApprove() internal {
-        vm.expectEmit(address(paymaster));
-        emit Approved(1);
-    }
 
     // ---- deployment ------------------------------------------------------------------------------------------
 
@@ -230,6 +36,11 @@ contract FrameGasPaymasterTest is FrameMocks {
             unstakeDelaySec: 0,
             minSettleGas: 0,
             minSettleStateGas: 0,
+            minSettlePermitStateGas: 0,
+            minApproveGas: 0,
+            minApproveStateGas: 0,
+            approveNeedsZero: false,
+            maxTxCostWei: 0,
             refundGasEstimate: 0
         });
         vm.expectRevert(FrameGasPaymaster.PoolNotInitialized.selector);
@@ -262,7 +73,7 @@ contract FrameGasPaymasterTest is FrameMocks {
     }
 
     function test_validateRevertsWhenNextFrameCallsAnotherFunction() public {
-        data.set(SETTLE_FRAME, abi.encodeCall(FrameGasPaymaster.syncReference, ()));
+        _setSettleData(SETTLE_FRAME, abi.encodeCall(FrameGasPaymaster.syncReference, ()));
         vm.expectRevert(FrameGasPaymaster.SettleNotBound.selector);
         paymaster.validate();
     }
@@ -291,6 +102,195 @@ contract FrameGasPaymasterTest is FrameMocks {
         paymaster.validate();
     }
 
+    /// @dev A frame sending ETH the user lacks reverts, and later frames still run.
+    function test_validateRevertsWhenSettleSendsValue() public {
+        fp.set(SETTLE_FRAME, VALUE, 1);
+        vm.expectRevert(FrameGasPaymaster.SettleMalformed.selector);
+        paymaster.validate();
+    }
+
+    /// @dev Missing words read as zero in validation, but Solidity's decoder reverts in `settle`.
+    function test_validateRevertsWhenSettleDataIsShort() public {
+        _setSettleData(SETTLE_FRAME, abi.encodePacked(FrameGasPaymaster.settle.selector, CAP));
+        vm.expectRevert(FrameGasPaymaster.SettleMalformed.selector);
+        paymaster.validate();
+    }
+
+    /// @dev Bounds what one transaction can cost, whatever gas limits a user declares.
+    function test_validateRevertsAboveTheMaximumTransactionCost() public {
+        txp.set(0x06, MAX_TX_COST + 1);
+        vm.expectRevert(
+            abi.encodeWithSelector(FrameGasPaymaster.MaxCostTooHigh.selector, MAX_TX_COST + 1, MAX_TX_COST)
+        );
+        paymaster.validate();
+    }
+
+    // ---- validation: bootstrap mode ------------------------------------------------------------------------------
+
+    /// @dev `[VERIFY sender, VERIFY paymaster, SENDER approve, SENDER settle, SENDER user, SENDER refund]`.
+    function _bootstrapTx(bytes memory approveData) internal {
+        vm.prank(user);
+        token.approve(address(paymaster), 0);
+        txp.set(0x09, 6);
+        _frame(2, address(token), 2, MIN_APPROVE_GAS, MIN_APPROVE_STATE);
+        _setSettleData(2, approveData);
+        _frame(3, address(paymaster), 2, MIN_SETTLE_GAS, MIN_SETTLE_STATE);
+        _setSettleData(3, _settleData(CAP, 0, 0, 0));
+        _frame(4, address(0xCAFE), 2, 50_000, 0);
+        _frame(5, address(paymaster), 2, 250_000, 0);
+    }
+
+    function _approveData() internal view returns (bytes memory) {
+        return abi.encodeCall(IERC20.approve, (address(paymaster), CAP));
+    }
+
+    function test_bootstrapApproves() public {
+        _bootstrapTx(_approveData());
+        _expectApprove();
+        paymaster.validate();
+    }
+
+    function test_bootstrapAcceptsMoreThanTheCap() public {
+        _bootstrapTx(abi.encodeCall(IERC20.approve, (address(paymaster), type(uint256).max)));
+        _expectApprove();
+        paymaster.validate();
+    }
+
+    function test_bootstrapRejectsAmountBelowCap() public {
+        _bootstrapTx(abi.encodeCall(IERC20.approve, (address(paymaster), CAP - 1)));
+        vm.expectRevert(FrameGasPaymaster.ApproveNotBound.selector);
+        paymaster.validate();
+    }
+
+    function test_bootstrapRejectsAnotherSpender() public {
+        _bootstrapTx(abi.encodeCall(IERC20.approve, (address(0xBAD), CAP)));
+        vm.expectRevert(FrameGasPaymaster.ApproveNotBound.selector);
+        paymaster.validate();
+    }
+
+    function test_bootstrapRejectsAnotherFunction() public {
+        _bootstrapTx(abi.encodeCall(IERC20.transfer, (address(paymaster), CAP)));
+        vm.expectRevert(FrameGasPaymaster.ApproveNotBound.selector);
+        paymaster.validate();
+    }
+
+    /// @dev Dirty upper bits pass a truncating read, but the token's decoder would revert.
+    function test_bootstrapRejectsDirtySpenderWord() public {
+        uint256 dirty = uint256(uint160(address(paymaster))) | (1 << 200);
+        _bootstrapTx(abi.encodeWithSelector(IERC20.approve.selector, dirty, CAP));
+        vm.expectRevert(FrameGasPaymaster.ApproveNotBound.selector);
+        paymaster.validate();
+    }
+
+    function test_bootstrapRejectsTrailingData() public {
+        _bootstrapTx(abi.encodePacked(_approveData(), uint256(1)));
+        vm.expectRevert(FrameGasPaymaster.ApproveNotBound.selector);
+        paymaster.validate();
+    }
+
+    function test_bootstrapRejectsValue() public {
+        _bootstrapTx(_approveData());
+        fp.set(2, VALUE, 1);
+        vm.expectRevert(FrameGasPaymaster.ApproveNotBound.selector);
+        paymaster.validate();
+    }
+
+    function test_bootstrapRejectsAtomicBatch() public {
+        _bootstrapTx(_approveData());
+        fp.set(2, ATOMIC, 1);
+        vm.expectRevert(FrameGasPaymaster.ApproveNotBound.selector);
+        paymaster.validate();
+    }
+
+    function test_bootstrapRejectsSenderlessMode() public {
+        _bootstrapTx(_approveData());
+        fp.set(2, MODE, 0);
+        vm.expectRevert(FrameGasPaymaster.ApproveNotBound.selector);
+        paymaster.validate();
+    }
+
+    function test_bootstrapRejectsLowGas() public {
+        _bootstrapTx(_approveData());
+        fp.set(2, GAS_LIMIT, MIN_APPROVE_GAS - 1);
+        vm.expectRevert(
+            abi.encodeWithSelector(FrameGasPaymaster.ApproveGasTooLow.selector, MIN_APPROVE_GAS - 1, MIN_APPROVE_STATE)
+        );
+        paymaster.validate();
+    }
+
+    function test_bootstrapRejectsLowStateGas() public {
+        _bootstrapTx(_approveData());
+        fp.set(2, STATE_LIMIT, MIN_APPROVE_STATE - 1);
+        vm.expectRevert(
+            abi.encodeWithSelector(FrameGasPaymaster.ApproveGasTooLow.selector, MIN_APPROVE_GAS, MIN_APPROVE_STATE - 1)
+        );
+        paymaster.validate();
+    }
+
+    function test_bootstrapRejectsAPermitToo() public {
+        _bootstrapTx(_approveData());
+        _setSettleData(3, _settleData(CAP, 27, bytes32(uint256(1)), bytes32(uint256(1))));
+        fp.set(3, STATE_LIMIT, MIN_SETTLE_PERMIT_STATE);
+        vm.expectRevert(FrameGasPaymaster.PermitWithBootstrap.selector);
+        paymaster.validate();
+    }
+
+    function test_bootstrapRejectsWhenBalanceBelowCap() public {
+        _bootstrapTx(_approveData());
+        vm.prank(user);
+        token.transfer(address(1), 100e6 - CAP + 1);
+        vm.expectRevert(abi.encodeWithSelector(FrameGasPaymaster.InsufficientBalance.selector, CAP - 1, CAP));
+        paymaster.validate();
+    }
+
+    /// @dev Validation demands the settle frame right after the approve, so it runs before any user call.
+    function test_bootstrapRejectsWhenSettleDoesNotFollowApprove() public {
+        _bootstrapTx(_approveData());
+        _frame(3, address(0xCAFE), 2, MIN_SETTLE_GAS, MIN_SETTLE_STATE);
+        vm.expectRevert(FrameGasPaymaster.SettleNotBound.selector);
+        paymaster.validate();
+    }
+
+    /// @dev The whole first transaction: no allowance, no ETH, then the allowance exists when settlement pulls.
+    function test_bootstrapApproveThenSettleThenRefund() public {
+        _bootstrapTx(_approveData());
+        _expectApprove();
+        paymaster.validate();
+
+        uint256 start = address(paymaster).balance;
+        vm.deal(address(paymaster), start - MAX_COST);
+        vm.startPrank(user);
+        token.approve(address(paymaster), CAP);
+        txp.set(0x0A, 3);
+        paymaster.settle(CAP, 0, 0, 0);
+        vm.stopPrank();
+        assertEq(address(paymaster).balance, start);
+
+        for (uint256 i = 0; i < 5; i++) {
+            fp.set(i, GAS_USED, 1_000);
+            fp.set(i, STATE_USED, 0);
+            fp.set(i, STATUS, 1);
+        }
+        txp.set(0x0A, 5);
+        vm.txGasPrice(MAX_FEE);
+        uint256 tokensBefore = token.balanceOf(user);
+        vm.prank(user);
+        paymaster.refund(3);
+        assertGt(token.balanceOf(user), tokensBefore, "the refund also works across the approve frame");
+    }
+
+    function test_refundRejectsWhenTheFrameBeforeSettleIsAnotherContract() public {
+        _bootstrapTx(_approveData());
+        for (uint256 i = 0; i < 5; i++) {
+            fp.set(i, STATUS, 1);
+        }
+        fp.set(2, TARGET, uint256(uint160(address(0xBAD))));
+        txp.set(0x0A, 5);
+        vm.prank(user);
+        vm.expectRevert(FrameGasPaymaster.RefundNotSettled.selector);
+        paymaster.refund(3);
+    }
+
     // ---- validation: the price and the user's funds ------------------------------------------------------------
 
     function test_quoteMatchesPoolPriceWithBuffer() public view {
@@ -300,13 +300,13 @@ contract FrameGasPaymasterTest is FrameMocks {
 
     function test_validateRevertsWhenCostExceedsCap() public {
         uint256 quoted = paymaster.quote(MAX_COST);
-        data.set(SETTLE_FRAME, _settleData(quoted - 1, 0, 0, 0));
+        _setSettleData(SETTLE_FRAME, _settleData(quoted - 1, 0, 0, 0));
         vm.expectRevert(abi.encodeWithSelector(FrameGasPaymaster.CostAboveCap.selector, quoted, quoted - 1));
         paymaster.validate();
     }
 
     function test_validateAcceptsCostExactlyAtCap() public {
-        data.set(SETTLE_FRAME, _settleData(paymaster.quote(MAX_COST), 0, 0, 0));
+        _setSettleData(SETTLE_FRAME, _settleData(paymaster.quote(MAX_COST), 0, 0, 0));
         _expectApprove();
         paymaster.validate();
     }
@@ -344,12 +344,25 @@ contract FrameGasPaymasterTest is FrameMocks {
         vm.prank(user);
         token.approve(address(paymaster), 0);
         (uint8 v, bytes32 r, bytes32 s) = _permitSig(signerKey, CAP, nonce, deadline);
-        data.set(SETTLE_FRAME, _settleData(CAP, v, r, s));
+        _setSettleData(SETTLE_FRAME, _settleData(CAP, v, r, s));
+        fp.set(SETTLE_FRAME, STATE_LIMIT, MIN_SETTLE_PERMIT_STATE);
     }
 
     function test_validateAcceptsAValidPermitWithNoAllowance() public {
         _permitTx(USER_KEY, 0, type(uint256).max);
         _expectApprove();
+        paymaster.validate();
+    }
+
+    /// @dev A first permit writes new slots, so too little state gas would make settlement run out.
+    function test_validateRejectsPermitWithLowStateGas() public {
+        _permitTx(USER_KEY, 0, type(uint256).max);
+        fp.set(SETTLE_FRAME, STATE_LIMIT, MIN_SETTLE_PERMIT_STATE - 1);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                FrameGasPaymaster.SettleGasTooLow.selector, MIN_SETTLE_GAS, MIN_SETTLE_PERMIT_STATE - 1
+            )
+        );
         paymaster.validate();
     }
 
@@ -379,7 +392,8 @@ contract FrameGasPaymasterTest is FrameMocks {
         (uint8 v, bytes32 r, bytes32 s) = _permitSig(USER_KEY, CAP, 0, type(uint256).max);
         bytes32 highS = bytes32(SECP_N - uint256(s));
         uint8 flippedV = v == 27 ? 28 : 27;
-        data.set(SETTLE_FRAME, _settleData(CAP, flippedV, r, highS));
+        _setSettleData(SETTLE_FRAME, _settleData(CAP, flippedV, r, highS));
+        fp.set(SETTLE_FRAME, STATE_LIMIT, MIN_SETTLE_PERMIT_STATE);
         vm.expectRevert(FrameGasPaymaster.InvalidPermit.selector);
         paymaster.validate();
     }
@@ -563,7 +577,7 @@ contract FrameGasPaymasterTest is FrameMocks {
 
         vm.prank(user);
         token.approve(address(paymaster), type(uint256).max);
-        data.set(SETTLE_FRAME, _settleData(100e6, 0, 0, 0));
+        _setSettleData(SETTLE_FRAME, _settleData(100e6, 0, 0, 0));
         _expectApprove();
         paymaster.validate();
     }

@@ -23,7 +23,9 @@ import {IStakingRegistry} from "./IStakingRegistry.sol";
 /// @title FrameGasPaymaster
 /// @notice Pays a frame transaction's gas in exchange for one ERC-20, priced and settled on a native-ETH Uniswap v4
 /// pool. One instance serves one token and pool, fixed at deployment. There is no owner.
-/// @dev The transaction is `[VERIFY sender, VERIFY validate(), SENDER settle(...), SENDER user calls..., SENDER refund(...)]`.
+/// @dev Normal mode: `[VERIFY sender, VERIFY validate(), SENDER settle(...), SENDER user calls..., SENDER refund(...)]`.
+/// Bootstrap mode, for a user with no allowance yet, puts `SENDER PAY_TOKEN.approve(this, n)` before the settle frame.
+/// A permit in the settle frame is a third option where the mempool allows `ecrecover` in validation.
 ///
 /// `validate` runs under the mempool's validation rules, so it reads no environment opcode. Its job is to make sure
 /// settlement cannot fail for a reason the user controls, because later frames still run after a failed frame.
@@ -46,8 +48,14 @@ contract FrameGasPaymaster is HegotaSupport(Devnet.ERC8421_WORKSHOP), IUnlockCal
     /// @param stakeAmount The part of `msg.value` staked. Nothing can withdraw it later, as there is no owner.
     /// @param unstakeDelaySec The unstake delay recorded with the stake.
     /// @param minSettleGas The execution gas limit a settle frame must declare.
-    /// @param minSettleStateGas The state gas limit a settle frame must declare.
-    /// @param refundGasEstimate The gas charged for the refund frame, which cannot read its own gas used.
+    /// @param minSettleStateGas The state gas limit a settle frame without a permit must declare.
+    /// @param minSettlePermitStateGas The state gas limit a settle frame with a permit must declare.
+    /// @param minApproveGas The execution gas limit a bootstrap approve frame must declare.
+    /// @param minApproveStateGas The state gas limit a bootstrap approve frame must declare.
+    /// @param approveNeedsZero Whether the token rejects changing a nonzero allowance, as USDT does.
+    /// @param maxTxCostWei The largest maximum cost accepted, which bounds what one transaction can cost this contract.
+    /// @param refundGasEstimate The gas charged for a refund frame with no frames before it. It cannot read its own gas
+    /// used, and `REFUND_GAS_PER_FRAME` is added for each frame before it.
     struct Config {
         IPoolManager poolManager;
         IStakingRegistry registry;
@@ -60,6 +68,11 @@ contract FrameGasPaymaster is HegotaSupport(Devnet.ERC8421_WORKSHOP), IUnlockCal
         uint32 unstakeDelaySec;
         uint256 minSettleGas;
         uint256 minSettleStateGas;
+        uint256 minSettlePermitStateGas;
+        uint256 minApproveGas;
+        uint256 minApproveStateGas;
+        bool approveNeedsZero;
+        uint256 maxTxCostWei;
         uint256 refundGasEstimate;
     }
 
@@ -77,6 +90,14 @@ contract FrameGasPaymaster is HegotaSupport(Devnet.ERC8421_WORKSHOP), IUnlockCal
     /// @dev Validation cannot read TIMESTAMP, so it cannot check a deadline. Only an unexpiring permit can be checked.
     uint256 private constant PERMIT_DEADLINE = type(uint256).max;
     uint256 private constant SUCCESS = 1;
+    /// @dev `settle(uint256,uint8,bytes32,bytes32)`. Shorter data would pass validation, then revert in the decoder.
+    uint256 private constant SETTLE_DATA_LENGTH = 132;
+    /// @dev `approve(address,uint256)`, exactly.
+    uint256 private constant APPROVE_DATA_LENGTH = 68;
+    /// @dev Frame gas `refund` cannot see from inside: the frame's entry charge, and the code around its measurement.
+    uint256 private constant REFUND_FRAME_OVERHEAD = 5_000;
+    /// @notice The refund reads each earlier frame's gas accounting, so it costs more with more frames.
+    uint256 public constant REFUND_GAS_PER_FRAME = 5_500;
 
     /// @notice The Uniswap v4 singleton holding the pool.
     IPoolManager public immutable POOL_MANAGER;
@@ -90,9 +111,19 @@ contract FrameGasPaymaster is HegotaSupport(Devnet.ERC8421_WORKSHOP), IUnlockCal
     uint256 public immutable BUFFER_BPS;
     /// @notice The execution gas limit a settle frame must declare.
     uint256 public immutable MIN_SETTLE_GAS;
-    /// @notice The state gas limit a settle frame must declare.
+    /// @notice The state gas limit a settle frame without a permit must declare.
     uint256 public immutable MIN_SETTLE_STATE_GAS;
-    /// @notice The gas charged for the refund frame.
+    /// @notice The state gas limit a settle frame with a permit must declare.
+    uint256 public immutable MIN_SETTLE_PERMIT_STATE_GAS;
+    /// @notice The execution gas limit a bootstrap approve frame must declare.
+    uint256 public immutable MIN_APPROVE_GAS;
+    /// @notice The state gas limit a bootstrap approve frame must declare.
+    uint256 public immutable MIN_APPROVE_STATE_GAS;
+    /// @notice Whether the token rejects changing a nonzero allowance.
+    bool public immutable APPROVE_NEEDS_ZERO;
+    /// @notice The largest maximum cost accepted.
+    uint256 public immutable MAX_TX_COST_WEI;
+    /// @notice The gas charged for a refund frame with no frames before it.
     uint256 public immutable REFUND_GAS_ESTIMATE;
 
     uint24 private immutable FEE;
@@ -128,6 +159,16 @@ contract FrameGasPaymaster is HegotaSupport(Devnet.ERC8421_WORKSHOP), IUnlockCal
     error SettleInAtomicBatch();
     /// @dev The settle frame declares too little gas, so the user could make settlement run out.
     error SettleGasTooLow(uint256 gasLimit, uint256 stateGasLimit);
+    /// @dev The settle frame sends ETH or has the wrong data length, so the frame or its decoder would revert.
+    error SettleMalformed();
+    /// @dev The frame before settlement is not exactly `PAY_TOKEN.approve(this, n)` with `n` covering the cap.
+    error ApproveNotBound();
+    /// @dev The approve frame declares too little gas, so the user could make it, and then settlement, fail.
+    error ApproveGasTooLow(uint256 gasLimit, uint256 stateGasLimit);
+    /// @dev A permit is not accepted alongside a bootstrap approve frame.
+    error PermitWithBootstrap();
+    /// @dev The transaction's maximum cost is above `MAX_TX_COST_WEI`.
+    error MaxCostTooHigh(uint256 maxCost, uint256 limit);
     /// @dev The permit in the settle frame would not succeed on the token.
     error InvalidPermit();
     /// @dev `syncReference` already ran in this block, or `refTick` already moved in it.
@@ -171,6 +212,11 @@ contract FrameGasPaymaster is HegotaSupport(Devnet.ERC8421_WORKSHOP), IUnlockCal
         BUFFER_BPS = config.bufferBps;
         MIN_SETTLE_GAS = config.minSettleGas;
         MIN_SETTLE_STATE_GAS = config.minSettleStateGas;
+        MIN_SETTLE_PERMIT_STATE_GAS = config.minSettlePermitStateGas;
+        MIN_APPROVE_GAS = config.minApproveGas;
+        MIN_APPROVE_STATE_GAS = config.minApproveStateGas;
+        APPROVE_NEEDS_ZERO = config.approveNeedsZero;
+        MAX_TX_COST_WEI = config.maxTxCostWei;
         REFUND_GAS_ESTIMATE = config.refundGasEstimate;
         refTick = tick;
         lastSyncBlock = uint64(block.number);
@@ -183,35 +229,45 @@ contract FrameGasPaymaster is HegotaSupport(Devnet.ERC8421_WORKSHOP), IUnlockCal
 
     /// @notice The VERIFY frame targeting this paymaster calls this. Approves payment when every check passes.
     /// @dev The cap and any permit are read from the settle frame, whose data the user signed, so validation and
-    /// settlement cannot disagree. Everything that could make settlement fail is checked here.
+    /// settlement cannot disagree. Everything that could make settlement fail is checked here. If the next frame targets
+    /// the token, it must be a bootstrap approve, followed by the settle frame.
     function validate() external {
         uint256 next = txparam(TxParam.CURRENT_FRAME_INDEX) + 1;
-        _requireSettleFrame(next);
+        bool bootstrap = _frameTarget(next) == address(PAY_TOKEN);
+        uint256 settleFrame = bootstrap ? next + 1 : next;
 
-        uint256 maxTokenCost = uint256(framedataload(4, next));
+        uint256 v = uint256(framedataload(36, settleFrame));
+        _requireSettleFrame(settleFrame, v);
+
+        uint256 maxCost = txparam(TxParam.MAX_COST);
+        if (maxCost > MAX_TX_COST_WEI) revert MaxCostTooHigh(maxCost, MAX_TX_COST_WEI);
+
+        uint256 maxTokenCost = uint256(framedataload(4, settleFrame));
         (uint160 sqrtPriceX96, int24 tick,,) = POOL_MANAGER.getSlot0(POOL_ID);
         int24 ref = refTick;
         if (_distance(tick, ref) > uint24(MAX_DEVIATION)) revert TickDeviated(tick, ref);
 
-        uint256 tokenCost = _quote(txparam(TxParam.MAX_COST), sqrtPriceX96);
+        uint256 tokenCost = _quote(maxCost, sqrtPriceX96);
         if (tokenCost > maxTokenCost) revert CostAboveCap(tokenCost, maxTokenCost);
 
         address sender = address(uint160(txparam(TxParam.SENDER)));
         uint256 balance = PAY_TOKEN.balanceOf(sender);
         if (balance < maxTokenCost) revert InsufficientBalance(balance, maxTokenCost);
 
-        uint256 v = uint256(framedataload(36, next));
-        if (v == 0) {
+        if (bootstrap) {
+            if (v != 0) revert PermitWithBootstrap();
+            _requireApproveFrame(next, sender, maxTokenCost);
+        } else if (v == 0) {
             uint256 allowance = PAY_TOKEN.allowance(sender, address(this));
             if (allowance < maxTokenCost) revert InsufficientAllowance(allowance, maxTokenCost);
         } else {
-            _requireValidPermit(sender, maxTokenCost, v, framedataload(68, next), framedataload(100, next));
+            _requireValidPermit(sender, maxTokenCost, v, framedataload(68, settleFrame), framedataload(100, settleFrame));
         }
 
         approve(Scope.PAYMENT);
     }
 
-    /// @notice The frame after validation calls this: applies any permit, then pays for the maximum gas cost.
+    /// @notice Validation binds this frame: it applies any permit, then pays for the maximum gas cost.
     /// @param maxTokenCost The most the user agrees to pay, in token base units.
     /// @param v Permit signature `v`, or 0 to rely on an existing allowance.
     /// @param r Permit signature `r`.
@@ -245,9 +301,17 @@ contract FrameGasPaymaster is HegotaSupport(Devnet.ERC8421_WORKSHOP), IUnlockCal
         if (
             _frameTarget(settleFrame) != address(this) || frameparam(settleFrame, FrameParam.STATUS) != SUCCESS
                 || bytes4(framedataload(0, settleFrame)) != this.settle.selector
-                || _frameTarget(settleFrame - 1) != address(this)
-                || frameparam(settleFrame - 1, FrameParam.MODE) != uint256(FrameMode.VERIFY)
-                || frameparam(settleFrame - 1, FrameParam.STATUS) != SUCCESS
+        ) revert RefundNotSettled();
+        // Validation sits directly before settlement, or before the bootstrap approve frame.
+        uint256 validateFrame = settleFrame - 1;
+        if (_frameTarget(validateFrame) != address(this)) {
+            if (validateFrame == 0 || _frameTarget(validateFrame) != address(PAY_TOKEN)) revert RefundNotSettled();
+            validateFrame -= 1;
+        }
+        if (
+            _frameTarget(validateFrame) != address(this)
+                || frameparam(validateFrame, FrameParam.MODE) != uint256(FrameMode.VERIFY)
+                || frameparam(validateFrame, FrameParam.STATUS) != SUCCESS
         ) revert RefundNotSettled();
 
         uint256 surplus = _surplus(current);
@@ -256,8 +320,9 @@ contract FrameGasPaymaster is HegotaSupport(Devnet.ERC8421_WORKSHOP), IUnlockCal
             POOL_MANAGER.unlock(abi.encode(Action.Refund, user, surplus, maxTokenCost));
         }
 
-        uint256 used = start - gasleft();
-        if (used > REFUND_GAS_ESTIMATE) revert RefundGasExceeded(used, REFUND_GAS_ESTIMATE);
+        uint256 used = start - gasleft() + REFUND_FRAME_OVERHEAD;
+        uint256 estimate = REFUND_GAS_ESTIMATE + current * REFUND_GAS_PER_FRAME;
+        if (used > estimate) revert RefundGasExceeded(used, estimate);
     }
 
     /// @inheritdoc IUnlockCallback
@@ -287,18 +352,41 @@ contract FrameGasPaymaster is HegotaSupport(Devnet.ERC8421_WORKSHOP), IUnlockCal
         return _quote(weiCost, sqrtPriceX96);
     }
 
-    function _requireSettleFrame(uint256 frame) private view {
+    function _requireSettleFrame(uint256 frame, uint256 v) private view {
         if (
             _frameTarget(frame) != address(this) || frameparam(frame, FrameParam.MODE) != uint256(FrameMode.SENDER)
                 || bytes4(framedataload(0, frame)) != this.settle.selector
         ) revert SettleNotBound();
         // In an atomic batch with the user's call, a reverting call would undo settlement after the paymaster paid.
         if (frameparam(frame, FrameParam.ATOMIC_BATCH) != 0) revert SettleInAtomicBatch();
+        // A frame sending ETH the user lacks reverts, and short calldata reverts in the decoder. Later frames still run.
+        if (frameparam(frame, FrameParam.VALUE) != 0 || frameparam(frame, FrameParam.DATA_LENGTH) != SETTLE_DATA_LENGTH) {
+            revert SettleMalformed();
+        }
         uint256 gasLimit = frameparam(frame, FrameParam.EXECUTION_GAS_LIMIT);
         uint256 stateGasLimit = frameparam(frame, FrameParam.STATE_GAS_LIMIT);
-        if (gasLimit < MIN_SETTLE_GAS || stateGasLimit < MIN_SETTLE_STATE_GAS) {
+        if (gasLimit < MIN_SETTLE_GAS || stateGasLimit < (v == 0 ? MIN_SETTLE_STATE_GAS : MIN_SETTLE_PERMIT_STATE_GAS)) {
             revert SettleGasTooLow(gasLimit, stateGasLimit);
         }
+    }
+
+    /// @dev The frame can only grant the allowance settlement is about to use, and it cannot fail for a reason the user
+    /// controls. Its target was already checked to be the token.
+    function _requireApproveFrame(uint256 frame, address sender, uint256 maxTokenCost) private view {
+        if (
+            frameparam(frame, FrameParam.MODE) != uint256(FrameMode.SENDER)
+                || frameparam(frame, FrameParam.ATOMIC_BATCH) != 0 || frameparam(frame, FrameParam.VALUE) != 0
+                || frameparam(frame, FrameParam.DATA_LENGTH) != APPROVE_DATA_LENGTH
+                || bytes4(framedataload(0, frame)) != IERC20.approve.selector
+                || uint256(framedataload(4, frame)) != uint256(uint160(address(this)))
+                || uint256(framedataload(36, frame)) < maxTokenCost
+        ) revert ApproveNotBound();
+        uint256 gasLimit = frameparam(frame, FrameParam.EXECUTION_GAS_LIMIT);
+        uint256 stateGasLimit = frameparam(frame, FrameParam.STATE_GAS_LIMIT);
+        if (gasLimit < MIN_APPROVE_GAS || stateGasLimit < MIN_APPROVE_STATE_GAS) {
+            revert ApproveGasTooLow(gasLimit, stateGasLimit);
+        }
+        if (APPROVE_NEEDS_ZERO && PAY_TOKEN.allowance(sender, address(this)) != 0) revert ApproveNotBound();
     }
 
     /// @dev Reproduces the token's own checks, so a permit that passes here cannot fail in `settle` by itself.
@@ -365,11 +453,13 @@ contract FrameGasPaymaster is HegotaSupport(Devnet.ERC8421_WORKSHOP), IUnlockCal
         uint256 maxFee = txparam(TxParam.MAX_FEE);
         uint256 unused;
         for (uint256 i = 0; i < current; i++) {
-            unused += frameparam(i, FrameParam.EXECUTION_GAS_LIMIT) + frameparam(i, FrameParam.STATE_GAS_LIMIT)
-                - frameparam(i, FrameParam.EXECUTION_GAS_USED) - frameparam(i, FrameParam.STATE_GAS_USED);
+            unused += frameparam(i, FrameParam.EXECUTION_GAS_LIMIT) - frameparam(i, FrameParam.EXECUTION_GAS_USED);
+            uint256 stateLimit = frameparam(i, FrameParam.STATE_GAS_LIMIT);
+            if (stateLimit != 0) unused += stateLimit - frameparam(i, FrameParam.STATE_GAS_USED);
         }
+        uint256 estimate = REFUND_GAS_ESTIMATE + current * REFUND_GAS_PER_FRAME;
         uint256 ownLimit = frameparam(current, FrameParam.EXECUTION_GAS_LIMIT);
-        if (ownLimit > REFUND_GAS_ESTIMATE) unused += ownLimit - REFUND_GAS_ESTIMATE;
+        if (ownLimit > estimate) unused += ownLimit - estimate;
 
         uint256 price = tx.gasprice < maxFee ? tx.gasprice : maxFee;
         uint256 maxGas = maxCost / maxFee;
