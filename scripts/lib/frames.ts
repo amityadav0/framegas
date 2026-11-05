@@ -51,7 +51,9 @@ export interface GaslessTxInit {
   senderLimit: bigint;
   validateLimit: bigint;
   validateData: Hex;
-  settle: { data: Hex; execution: bigint; state: bigint; flags?: number };
+  /** Bootstrap mode: `PAY_TOKEN.approve(paymaster, n)`, right before settlement. */
+  approve?: { to: Address; data: Hex; execution: bigint; state: bigint; flags?: number; value?: bigint };
+  settle: { data: Hex; execution: bigint; state: bigint; flags?: number; value?: bigint };
   /** The user's calls, one frame each. They run after settlement. */
   calls: { to: Address; data?: Hex; execution: bigint; state?: bigint }[];
   /** Best effort, so it may be left out. It must be the last frame. */
@@ -59,7 +61,7 @@ export interface GaslessTxInit {
   maxPriorityFeePerGas?: bigint;
 }
 
-/** `[only_verify, pay, settle, user calls..., refund]`: the full FrameGas transaction. */
+/** `[only_verify, pay, (approve), settle, user calls..., refund]`: the full FrameGas transaction. */
 export function gaslessTx(a: GaslessTxInit): FrameTx {
   return tx.newTx({
     chainId: CHAIN_ID,
@@ -68,7 +70,8 @@ export function gaslessTx(a: GaslessTxInit): FrameTx {
     frames: [
       tx.frame(profile, "VERIFY", { scope: "EXECUTION", target: null, execution: a.senderLimit }),
       tx.frame(profile, "VERIFY", { scope: "PAYMENT", target: a.paymaster, execution: a.validateLimit, data: a.validateData }),
-      tx.frame(profile, "SENDER", { target: a.paymaster, execution: a.settle.execution, state: a.settle.state, data: a.settle.data, flags: a.settle.flags }),
+      ...(a.approve ? [tx.frame(profile, "SENDER", { target: a.approve.to, execution: a.approve.execution, state: a.approve.state, data: a.approve.data, flags: a.approve.flags, value: a.approve.value })] : []),
+      tx.frame(profile, "SENDER", { target: a.paymaster, execution: a.settle.execution, state: a.settle.state, data: a.settle.data, flags: a.settle.flags, value: a.settle.value }),
       ...a.calls.map((c) => tx.frame(profile, "SENDER", { target: c.to, execution: c.execution, state: c.state, data: c.data })),
       ...(a.refund ? [tx.frame(profile, "SENDER", { target: a.paymaster, execution: a.refund.execution, state: a.refund.state, data: a.refund.data })] : []),
     ],
