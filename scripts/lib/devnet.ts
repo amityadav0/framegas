@@ -26,7 +26,7 @@ const LEGACY_GAS_PRICE = 2_000_000n; // 0.002 gwei; the devnet base fee is 7 wei
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Calls `url`, retrying only when the endpoint could not be reached. A node's answer, even an error, is final. */
-export async function rpcAt(url: string, method: string, params: unknown[] = [], attempts = 6): Promise<any> {
+export async function rpcAt(url: string, method: string, params: unknown[] = [], attempts = 24): Promise<any> {
   for (let attempt = 1; ; attempt++) {
     try {
       return await libRpc(url, method, params);

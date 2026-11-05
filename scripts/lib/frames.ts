@@ -43,7 +43,42 @@ export function paymasterTx(a: PaymasterTxInit) {
 
 export type FrameTx = ReturnType<typeof paymasterTx>;
 
+export interface GaslessTxInit {
+  sender: Address;
+  signer?: Address;
+  paymaster: Address;
+  nonce: bigint;
+  senderLimit: bigint;
+  validateLimit: bigint;
+  validateData: Hex;
+  settle: { data: Hex; execution: bigint; state: bigint; flags?: number };
+  /** The user's calls, one frame each. They run after settlement. */
+  calls: { to: Address; data?: Hex; execution: bigint; state?: bigint }[];
+  /** Best effort, so it may be left out. It must be the last frame. */
+  refund?: { data: Hex; execution: bigint; state: bigint };
+  maxPriorityFeePerGas?: bigint;
+}
+
+/** `[only_verify, pay, settle, user calls..., refund]`: the full FrameGas transaction. */
+export function gaslessTx(a: GaslessTxInit): FrameTx {
+  return tx.newTx({
+    chainId: CHAIN_ID,
+    sender: a.sender,
+    nonceSeq: a.nonce,
+    frames: [
+      tx.frame(profile, "VERIFY", { scope: "EXECUTION", target: null, execution: a.senderLimit }),
+      tx.frame(profile, "VERIFY", { scope: "PAYMENT", target: a.paymaster, execution: a.validateLimit, data: a.validateData }),
+      tx.frame(profile, "SENDER", { target: a.paymaster, execution: a.settle.execution, state: a.settle.state, data: a.settle.data, flags: a.settle.flags }),
+      ...a.calls.map((c) => tx.frame(profile, "SENDER", { target: c.to, execution: c.execution, state: c.state, data: c.data })),
+      ...(a.refund ? [tx.frame(profile, "SENDER", { target: a.paymaster, execution: a.refund.execution, state: a.refund.state, data: a.refund.data })] : []),
+    ],
+    signatures: [tx.secp256k1Placeholder(profile, a.signer ?? "0x")],
+    fees: { maxFeePerGas: MAX_FEE_PER_GAS, maxPriorityFeePerGas: a.maxPriorityFeePerGas },
+  });
+}
+
 export const sign = (t: FrameTx, key: Hex): Promise<FrameTx> => tx.signTx(profile, t, key) as Promise<FrameTx>;
+export const maxFeePerGas = MAX_FEE_PER_GAS;
 export const hashOf = (t: FrameTx): Hex => tx.txHash(profile, t);
 export const rawOf = (t: FrameTx): Hex => tx.encodeTx(profile, t);
 export const explorerTx = (hash: Hex): string => `${EXPLORER}/tx/${hash}`;
@@ -71,8 +106,9 @@ export async function toCanonicalMempool(t: FrameTx): Promise<Outcome> {
 export interface Mined {
   block: number;
   status: string;
-  frames: { status: string; gasUsed: bigint }[];
+  frames: { status: string; gasUsed: bigint; stateGasUsed: bigint }[];
   gasUsed: bigint;
+  effectiveGasPrice: bigint;
 }
 
 export async function mined(hash: Hex): Promise<Mined> {
@@ -81,7 +117,12 @@ export async function mined(hash: Hex): Promise<Mined> {
     block: Number(r.blockNumber),
     status: r.status,
     gasUsed: BigInt(r.gasUsed ?? r.cumulativeGasUsed ?? 0),
-    frames: (r.frameReceipts ?? []).map((f: { status: string; gasUsed: string }) => ({ status: f.status, gasUsed: BigInt(f.gasUsed) })),
+    effectiveGasPrice: BigInt(r.effectiveGasPrice ?? 0),
+    frames: (r.frameReceipts ?? []).map((f: { status: string; gasUsed: string; stateGasUsed?: string }) => ({
+      status: f.status,
+      gasUsed: BigInt(f.gasUsed),
+      stateGasUsed: BigInt(f.stateGasUsed ?? 0),
+    })),
   };
 }
 

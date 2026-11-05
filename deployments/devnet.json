@@ -17,5 +17,7 @@
     "wallet": "0xd0247201e47f8fb2a1de27fc52bb22ce438f91df",
     "probe": "0x2fc9a3f25c65d38f83bdb128c23728cc5ef75af8",
     "sponsor": "0x10ac328dd156747c92517743a1a62558ceea042f"
-  }
+  },
+  "paymaster": "0x8563f3e73165dc888d4793bf296beeab035bc30c",
+  "endToEndTx": "0x4ffbaf0048f2af8ef5eb89785a5204ad21c566a07089257861f55bc966cd9f10"
 }
