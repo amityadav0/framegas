@@ -28,7 +28,7 @@ Explorer history is held in memory and is cleared when the node restarts, so thi
 
 | # | Observation | Pinned draft (PR #6) | ERC-8421 | Actual (devnet) | Evidence | Repro |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | Validation gas budget | `MAX_VERIFY_GAS` applies to the whole prefix (FRA-040) | Per entity: 100,000 unstaked, 1,000,000 staked (BUDGET-010) | Flat 100,000 across the prefix, including signature cost (2,800 for SECP256K1), for staked entities too. `devnet-readme.md` describes a staked budget that the node does not apply. See [the cap test](#the-100000-cap-live) | Live and source | `scripts/03-validation-gas.ts` |
+| 1 | Validation gas budget | `MAX_VERIFY_GAS` applies to the whole prefix (FRA-040) | Per entity: 100,000 unstaked, 1,000,000 staked (BUDGET-010) | Flat 100,000 across the prefix, including signature cost (2,800 for SECP256K1), for staked entities too. `devnet-readme.md` describes a staked budget that the node does not apply. See [the cap test](#the-100000-cap-live) | Live and source | `scripts/03-validation-gas.ts` at `ecf811f` |
 | 2 | The budget counts declared limits | Sum of `limits.execution` | Sum of `limits.execution` per entity | Declared limits are summed, not gas used. Step 8's sender frame declared 70,000 and used 15,805 | Live and source | `yarn step_11_debug <tx>`, `frames[0].limits`, `frameReceipts[0].gasUsed` |
 | 3 | State gas cap in validation | `MAX_VERIFY_STATE_GAS` 500,000 | No such constant | 500,000 enforced | Source | `validationPrefix.ts` |
 | 4 | Rule identifiers | `OP-*`, `STO-*`, `COD-*`, `GREP-*`, `FRA-*` | `OPCODES-*`, `STORAGE-*`, `REPUTATION-*`, `PREFIX-*` | PR #6 names appear in admission reports (`OP-011`, `OP-061`, `COD-010`) | Live | `yarn step_11_debug <tx>` |
@@ -39,8 +39,13 @@ Explorer history is held in memory and is cleared when the node restarts, so thi
 | 9 | `pre_verify` frames (a `DEFAULT` frame before the approving frame, able to write) | Not defined | Defined (PREFIX-110, PREFIX-120) | Recognised by the sidecar source, so the source is ahead of the pin. Not exercised | Source | `validationPrefix.ts` |
 | 10 | Banned-entity rejection text | `BANNED` entities are excluded | `BANNED` entities are excluded (REPUTATION-010) | Excluded, but the error reads `unstaked payer accessed …`, with no mention of the ban. Only the explorer's reputation view shows the cause | Live | Workshop steps 9 and 10 |
 
-| 14 | Unstaked rejection names the first slot it reaches | Not specified | An unstaked paymaster with its own storage is rejected with `unstaked payer accessed payer slot 0x0`, its own slot, before the PoolManager read is reported. A probe with no storage of its own is rejected naming the PoolManager | Live | `scripts/02-staked-paymaster-proof.ts`, `scripts/03-validation-gas.ts` |
+| 14 | Unstaked rejection names the first slot it reaches | Not specified | An unstaked paymaster with its own storage is rejected with `unstaked payer accessed payer slot 0x0`, its own slot, before the PoolManager read is reported. A probe with no storage of its own is rejected naming the PoolManager | Live | `scripts/02-staked-paymaster-proof.ts` at `e93a1db`, `scripts/03-validation-gas.ts` at `ecf811f` |
 | 15 | `GAS` opcode | Allowed only directly before a `*CALL` (OP-012) | Bound by EIP-8141's banned opcodes | The sidecar's banned list contains `GAS`, yet Solidity's external calls pass. The trace's `usedOpcodes` omits opcode 90 for these calls. Bare `gasleft()` was not tested | Live | `ethrex_simulateFrameTransaction` with `trace: true` |
+| 18 | Precompiles in validation | Core precompiles allowed (OP-062) | Core precompiles allowed (CALLING-040) | **All rejected.** `skandha_config` reports `precompiles: []`, so `ecrecover` in a validation frame fails with `payer accesses un-deployed contract address 0x…0001 with opcode STATICCALL`. ethrex's own simulation of the same transaction executes successfully | Live | `scripts/04-end-to-end.ts --permit-in-frame` |
+| 19 | `FRAMEPARAM` ids 0x09 to 0x0B | Not in the pinned EIP-8141 table, which stops at 0x08 | Not specified | The devnet returns state gas limit, gas used and state gas used. Gas used matches the receipt for finished frames. Reading the current frame halts | Live | `scripts/06-frame-probe.ts` |
+| 20 | Transient storage across frames | Treated like persistent storage (OP-070) | Treated like persistent storage | Does not survive from one frame to the next: a value written in one `SENDER` frame reads as 0 in the following one. Settlement therefore passes nothing to the refund this way | Live | `scripts/06-frame-probe.ts` |
+| 21 | State gas per new storage slot | Not specified | Not specified | 97,920 state gas per zero-to-nonzero slot, on top of execution gas, and it counts toward the fee. Execution gas cannot substitute for it: a settle frame short of state gas fails even with 1,500,000 execution gas | Live | Receipts of the first end-to-end transaction below |
+| 22 | Frame failure and later frames | Later frames still run (EIP-8141) | Later frames still run | Confirmed: in simulation a failed settle frame was followed by a successful user call. Validation has to rule out any settlement failure the user controls | Live | `ethrex_simulateFrameTransaction` |
 
 ## Devnet state versus its documentation
 
@@ -66,7 +71,7 @@ The sender and the payer are separate accounts: an EOA holding 0 wei, and `Frame
 
 The trace confirms the read. The paymaster frame makes a `STATICCALL` to the PoolManager and reads `0x2b3af0c4…a4d5`, which equals `keccak256(poolId, 6)`, this pool's `slot0`. The probe's rejection names the same address and slot, so stake is what makes that read admissible. This matches PR #6 STO-033 and ERC-8421 STORAGE-032.
 
-Repro: `scripts/02-staked-paymaster-proof.ts`, `scripts/03-validation-gas.ts`.
+Repro: `scripts/02-staked-paymaster-proof.ts` at commit `e93a1db` and `scripts/03-validation-gas.ts` at commit `ecf811f`. Both target the validation-only contract, so they are not in the current tree.
 
 ## The 100,000 cap, live
 
@@ -87,6 +92,62 @@ Minimum limits were found by binary search in simulation. The contract wallet's 
 | EOA (default code) | 100 | 29,175 | 2,800 | 32,075 | 67,925 |
 | `OwnerWallet` contract | 7,067 | 29,175 | 2,800 | 39,042 | 60,958 |
 
-The paymaster's 29,175 gas covers the `slot0` read, the reference tick, two `TXPARAM` reads, the balance and allowance reads, and `APPROVE`. These figures are for the validation-only contract, and the checks added for settlement will raise them.
+These figures are for the validation-only contract, whose 29,175 gas covered the `slot0` read, the reference tick, two `TXPARAM` reads, the balance and allowance reads, and `APPROVE`. Binding the settle frame raises it, as measured [below](#end-to-end-settlement).
 
 Rejected transactions did not cost the paymaster reputation: after these tests the explorer shows `opsSeen` 3, `opsIncluded` 3, status `ok`.
+
+## End-to-end settlement
+
+[Full transaction](https://explorer.altmempool.wtf/tx/0x4ffbaf0048f2af8ef5eb89785a5204ad21c566a07089257861f55bc966cd9f10), block 404108, 2 gwei. The sender held 0 wei before and after. The call sent 1 fgUSD to another account.
+
+| Frame | Purpose | Execution gas | State gas |
+| --- | --- | --- | --- |
+| 0 | Sender `VERIFY` (EOA) | 100 | 0 |
+| 1 | Paymaster `validate` | 42,616 | 0 |
+| 2 | `settle`: pull tokens, swap for ETH | 116,110 | 0 |
+| 3 | User call | 15,074 | 0 |
+| 4 | `refund`: sell surplus ETH for tokens | 76,473 | 0 |
+
+| | |
+| --- | --- |
+| Total gas | 270,088, including 19,715 outside the frames |
+| Fee | 0.000540176 ETH, or 1,293,493 fgUSD units at the pool price |
+| Maximum cost reserved | 0.00175143 ETH, 3.24x the fee |
+| User paid | 1,378,742 fgUSD units, 1.066x the fee |
+| Paymaster ETH | +0.000027054 ETH |
+
+That transaction does not contain a permit. Because of row 18, the user's signed permit was submitted in a separate transaction first, which anyone can pay for. With a permit in the settle frame, `validate` used 48,625 gas in simulation, and the whole transaction executed successfully there, but the sidecar refuses it.
+
+The 6.6% the user pays above the fee has two sources: the pool fee on both swaps, and the gap between the refund's 90,000 gas estimate and its 76,473 gas used. The refund frame cannot read its own gas used, so that gap goes to the paymaster.
+
+The first transaction through a new pool costs more. [This one](https://explorer.altmempool.wtf/tx/0xe83bef8be298746845d3e69c871207e5aa2b493b3c5650fa6c5a50d0256d0bd2) initialised `feeGrowthGlobal1` in settlement, wrote a new balance slot in the user call and initialised `feeGrowthGlobal0` in the refund, at 97,920 state gas each. The minimum limits validation enforces cover the worst case in settlement: 200,000 execution and 300,000 state.
+
+## Griefing paths
+
+A failed frame does not stop later ones, so a settlement that fails after `APPROVE` would give the user free gas. Each of these was rejected at admission with the intended error:
+
+| Attempt | Error |
+| --- | --- |
+| No settle frame after validation | `SettleNotBound` |
+| Settle frame declares 199,999 execution gas | `SettleGasTooLow` |
+| Settle frame declares 299,999 state gas | `SettleGasTooLow` |
+| Settle frame in an atomic batch with the user's call | `SettleInAtomicBatch` |
+| Cap below the quote | `CostAboveCap` |
+| Cap above the balance | `InsufficientBalance` |
+| No allowance and no permit | `InsufficientAllowance` |
+
+These were mined, and in each the paymaster ended with more ETH than it started with:
+
+| Scenario | Frame statuses | User paid (cap 8,000,000) | Paymaster |
+| --- | --- | --- | --- |
+| [User call reverts](https://explorer.altmempool.wtf/tx/0xb9cb5fb418cf29e5d56e481607d357f05a8a371077d1da9850380b8427878c78) | 1 1 1 0 1 | 1,313,984 | +0.000028904 ETH |
+| [Refund runs out of gas](https://explorer.altmempool.wtf/tx/0xe6ce193255fec021eccf9cd1ead0f58ce2d91b2791d2cd4c23feb527fc01b8fd) | 1 1 1 1 0 | 3,942,086 | +0.00118434 ETH |
+| [No refund frame](https://explorer.altmempool.wtf/tx/0x7077678d6cfd6e5ac1606939d7ec6f2746d9a1b3124f8c68ea739f5aee6aa940) | 1 1 1 1 | 3,804,241 | +0.001185986 ETH |
+
+Repro: `scripts/04-end-to-end.ts`, `scripts/05-griefing-proofs.ts`.
+
+## Limitations from the validation rules
+
+- **Permits must not expire.** `TIMESTAMP` is banned in validation, so a deadline cannot be checked there, and a permit that passed validation and then expired would fail after the paymaster paid. Gas permits use `deadline = type(uint256).max`. The permit's value (equal to `maxTokenCost`) and its nonce bound it.
+- **Tokens without EIP-2612 need Permit2 or an existing allowance.** The path through Permit2 is not built yet.
+- **Native signatures cannot replace the permit check.** An EIP-8141 signature entry with `msg` set to the permit digest would get the digest verified with no precompile, but `SECP256K1` signature bytes cannot be read back (`SIGDATACOPY` halts for that scheme), so nothing ties that signature to the `r` and `s` the settle frame passes to the token.
