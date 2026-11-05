@@ -7,10 +7,11 @@
  * `--permit-in-frame` instead sends the permit path, which needs `ecrecover` in validation. The devnet's sidecar refuses
  * it while its config has `precompiles: []`, so that run records the node's answer.
  */
+import fs from "node:fs";
 import { encodeFunctionData, parseUnits, type Address, type Hex } from "viem";
 import { generatePrivateKey } from "viem/accounts";
 import { addressOf, balanceOf, devnetKey, read, readDeployments, recordDeployments, rpc, send } from "./lib/devnet.js";
-import { executes, explorerTx, gaslessTx, maxFeePerGas, mined, sign, simulate, toAltMempool, type FrameTx } from "./lib/frames.js";
+import { executes, explorerTx, gaslessTx, hashOf, maxFeePerGas, mined, rawOf, sign, simulate, toAltMempool, toCanonicalMempool, type FrameTx } from "./lib/frames.js";
 import { approveData, deployPaymaster, erc20Abi, LIMITS, paymasterAbi, refundData, refundLimit, settleData, signPermit, validateData, type PermitSignature } from "./lib/gas-payment.js";
 
 const RECIPIENT: Address = "0x8943545177806ED17B9F23F0a21ee5948eCaa776";
@@ -46,7 +47,15 @@ async function main() {
     const maxCost = BigInt(sim.maxCost);
 
     const before = { user: await balance(user), float: await balanceOf(paymaster), recipient: await balance(RECIPIENT) };
+    // Identical signed bytes to both mempools. The canonical one goes first, because it should refuse them.
+    const canonical = await toCanonicalMempool(t);
+    if (canonical.admitted) throw new Error(`${name}: the canonical mempool admitted it: ${canonical.hash}`);
+    console.log(`${name}: canonical mempool: ${canonical.error}`);
     const result = await toAltMempool(t);
+    fs.writeFileSync(
+      new URL(`../docs/evidence/mempool-comparison-${name}-${hashOf(t)}.json`, import.meta.url),
+      `${JSON.stringify({ label: name, txHash: hashOf(t), signedRawTx: rawOf(t), canonicalMempool: { method: "eth_sendRawTransaction", response: canonical }, altMempool: { method: "eth_sendFrameTransaction", response: result }, simulatedCanonicalVerdict: sim.canonicalMempoolViolation }, null, 2)}\n`,
+    );
     if (!result.admitted) {
       console.log(`${name}: rejected by the alt-mempool: ${result.error}\n`);
       if (argFlag("--permit-in-frame")) return;
