@@ -23,8 +23,21 @@ export const PREDEPLOYS = {
 
 const LEGACY_GAS_PRICE = 2_000_000n; // 0.002 gwei; the devnet base fee is 7 wei
 
-export const rpc = (method: string, params: unknown[] = []): Promise<any> => libRpc(GATEWAY, method, params);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Calls `url`, retrying only when the endpoint could not be reached. A node's answer, even an error, is final. */
+export async function rpcAt(url: string, method: string, params: unknown[] = [], attempts = 6): Promise<any> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await libRpc(url, method, params);
+    } catch (e) {
+      if ((e as { code?: string }).code !== "RPC_UNREACHABLE" || attempt >= attempts) throw e;
+      await sleep(5_000);
+    }
+  }
+}
+
+export const rpc = (method: string, params: unknown[] = []): Promise<any> => rpcAt(GATEWAY, method, params);
 
 function readEnv(): Record<string, string> {
   if (!fs.existsSync(envFile)) return {};

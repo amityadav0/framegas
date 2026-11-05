@@ -8,5 +8,14 @@
     "fee": 3000,
     "tickSpacing": 60,
     "hooks": "0x0000000000000000000000000000000000000000"
+  },
+  "stakedPaymasterValidationOnly": "0x7503ed4e90b0cab850412fd8bf318b8e269f9996",
+  "unstakedPaymasterControl": "0x3c09c2f45170911f64fb30876e598b2d788fe913",
+  "keyProofTx": "0xcafcd1666aec43cb979c8dcdf1ecc9d1eb52bfd359063b778a40f27c118206af",
+  "keyProofTxHash": "0xcafcd1666aec43cb979c8dcdf1ecc9d1eb52bfd359063b778a40f27c118206af",
+  "gasMeasurement": {
+    "wallet": "0xd0247201e47f8fb2a1de27fc52bb22ce438f91df",
+    "probe": "0x2fc9a3f25c65d38f83bdb128c23728cc5ef75af8",
+    "sponsor": "0x10ac328dd156747c92517743a1a62558ceea042f"
   }
 }
