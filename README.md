@@ -1,5 +1,7 @@
 # FrameGas
 
+[![@framegas/sdk](https://img.shields.io/npm/v/@framegas/sdk?label=%40framegas%2Fsdk)](https://www.npmjs.com/package/@framegas/sdk) [![@framegas/mcp](https://img.shields.io/npm/v/@framegas/mcp?label=%40framegas%2Fmcp)](https://www.npmjs.com/package/@framegas/mcp)
+
 **Pay Ethereum gas in an ERC-20, from a wallet holding zero ETH, in one signed transaction.**
 
 - FrameGas is a paymaster contract for [EIP-8141](https://eips.ethereum.org/EIPS/eip-8141) frame transactions. Its validation frame prices gas from a Uniswap v4 pool, and its execution frames buy the gas on that pool with the user's tokens.
@@ -13,19 +15,23 @@
 ```sh
 git clone --recursive https://github.com/amityadav0/framegas.git && cd framegas   # --recursive fetches the Foundry libraries
 pnpm install
-pnpm --filter @framegas/demo build && pnpm --filter @framegas/demo start          # http://localhost:3000, Replay needs no chain and no env vars
+pnpm --filter @framegas/demo build && pnpm --filter @framegas/demo start          # builds the SDK first; http://localhost:3000, Replay needs no chain and no env vars
 scripts/redeploy.sh --fresh              # optional, devnet only: token, pool, liquidity, staked paymaster, demo contracts, smoke test
 ```
 
-The demo builds with webpack (`pnpm build` runs `next build --webpack`): the SDK is TypeScript source with NodeNext `./x.js` imports, which Turbopack, Next 16's default for a bare `next build`, does not resolve. Live mode needs `FRAMEGAS_DEMO_KEY`, a devnet key holding fgUSD and no ETH.
+The demo's `pnpm build` builds the SDK's `dist/`, then runs `next build --webpack`: the demo's NodeNext `./x.js` imports are not resolved by Turbopack, Next 16's default for a bare `next build`. The MCP and demo tests import the SDK's `dist/`, so run `pnpm -r build` before them. Live mode needs `FRAMEGAS_DEMO_KEY`, a devnet key holding fgUSD and no ETH.
 
 `redeploy.sh` generates a deployer key into the git-ignored `.env` and funds it from the devnet faucet. It locks about 0.085 ETH (0.33 ETH with `--seed-eth 0.3`) and writes [`deployments/devnet.json`](./deployments/devnet.json).
 
 One SDK call, from a key that holds the token and no ETH:
 
+```sh
+pnpm add @framegas/sdk
+```
+
 ```ts
 import { createFrameGas } from "@framegas/sdk";
-import deployment from "./deployments/devnet.json";
+import deployment from "@framegas/sdk/deployments/devnet.json" with { type: "json" };
 
 const framegas = createFrameGas({ privateKey, paymasters: deployment.paymasters });
 const { requiredTokens } = await framegas.quote({ payToken: deployment.fgUSD, calls });
@@ -238,7 +244,7 @@ The paymaster stakes 0.012 ETH in the ERC-8421 staking registry from its constru
 | --- | --- |
 | `contracts/` | Foundry: `FrameGasPaymaster`, `FgUSD`, demo `MockLendingPool`, unit and fuzz tests |
 | `sdk/` | `@framegas/sdk`: simulates for frame limits, quotes, builds, signs, submits |
-| `mcp/` | `@framegas/mcp`: `framegas_quote`, `framegas_send`, `framegas_budget` |
+| `mcp/` | `@framegas/mcp` on npm: `framegas_quote`, `framegas_send`, `framegas_budget` |
 | `demo/` | Next.js console: Replay from `docs/evidence/` (default, no env vars), Live through the SDK. Hosting: root directory `demo`, build command `pnpm build` |
 | `scripts/` | `redeploy.sh` and the numbered scripts that reproduce each finding; `10-quota-live.ts` measures the quota |
 | `cre/` | Chainlink CRE workflow: mainnet vs devnet price divergence, see below |
@@ -246,7 +252,7 @@ The paymaster stakes 0.012 ETH in the ERC-8421 staking registry from its constru
 
 ## MCP server and agent skill
 
-[`mcp/`](./mcp/src/server.ts) is a stdio MCP server over the SDK with three tools. Amounts are decimal strings in token units; addresses and calldata are checked against hex patterns in the schema.
+[`@framegas/mcp`](./mcp/README.md) ([source](./mcp/src/server.ts)) is a stdio MCP server over the SDK with three tools, run with `npx -y @framegas/mcp`. Amounts are decimal strings in token units; addresses and calldata are checked against hex patterns in the schema.
 
 | Tool | Inputs | Returns | Sends? |
 | --- | --- | --- | --- |
@@ -262,8 +268,8 @@ Failures come back as `{ error: { code, message, details } }` with the SDK's cod
 {
   "mcpServers": {
     "framegas": {
-      "command": "/absolute/path/to/pnpm",
-      "args": ["--dir", "/absolute/path/to/framegas/mcp", "start"],
+      "command": "npx",
+      "args": ["-y", "@framegas/mcp"],
       "env": {
         "FRAMEGAS_PRIVATE_KEY": "0x… a devnet-only key holding fgUSD and no ETH"
       }
@@ -272,7 +278,7 @@ Failures come back as `{ error: { code, message, details } }` with the SDK's cod
 }
 ```
 
-Claude Desktop does not inherit your shell's `PATH`, so use the output of `which pnpm`. `FRAMEGAS_DEPLOYMENTS` overrides the path to `deployments/devnet.json`. Never put a key that holds real funds here.
+If Claude Desktop cannot find `npx` (it does not inherit your shell's `PATH`), use the output of `which npx`. `FRAMEGAS_DEPLOYMENTS` overrides the deployment, which defaults to the `deployments/devnet.json` shipped in `@framegas/sdk`. From a clone, `pnpm --dir mcp start` runs the source instead. Never put a key that holds real funds here.
 
 **Skill.** [`skill/SKILL.md`](./skill/SKILL.md) follows the [Uniswap AI skills](https://github.com/Uniswap/uniswap-ai) format: when to use, prerequisites, step-by-step SDK and MCP calls, bootstrap and normal examples, and every SDK code and paymaster error with what it means. Two eval cases with expected behaviours are in [`skill/evals/`](./skill/evals/).
 
