@@ -116,13 +116,19 @@ async function main() {
   if (stake !== STAKE || withdrawTime !== 0n) throw new Error(`the registry shows stake ${stake}, withdrawal ${withdrawTime}`);
   console.log(`paymaster ${paymaster}, staked ${formatEther(stake)} ETH, delay ${delay}s`);
 
-  // 5. Registration. There is no owner to register with on chain: one paymaster serves one token, and this is the list.
+  // 5. Demo call targets: v4-core's swap router, for "swap tokens for ETH", and a mock lending market.
+  const swapRouter = await deploy(key, "PoolSwapTest", [PREDEPLOYS.poolManager]);
+  const lendingPool = await deploy(key, "MockLendingPool");
+  console.log(`demo     swap router ${swapRouter}, lending pool ${lendingPool}`);
+
+  // 6. Registration. There is no owner to register with on chain: one paymaster serves one token, and this is the list.
   const deployment = {
     chainId: 1337,
     fgUSD: token,
     paymaster,
     pool: { id: poolId, currency0: zeroAddress, currency1: token, fee: FEE, tickSpacing: TICK_SPACING, hooks: zeroAddress },
     paymasters: { [token]: paymaster },
+    demo: { swapRouter, lendingPool },
     tokens: {
       fgUSD: {
         address: token,
@@ -137,7 +143,7 @@ async function main() {
   fs.writeFileSync(out, `${JSON.stringify(deployment, null, 2)}\n`);
   console.log(`recorded ${out}`);
 
-  // 6. Smoke test through the SDK, from a new key holding no ETH.
+  // 7. Smoke test through the SDK, from a new key holding no ETH.
   const userKey = generatePrivateKey();
   const user = addressOf(userKey);
   await send(key, { to: token, data: encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: [user, parseUnits("100", 6)] }) });
