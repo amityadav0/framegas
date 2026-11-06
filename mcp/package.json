@@ -4,14 +4,49 @@
   "description": "MCP tools to quote and send gas-in-token transactions with FrameGas",
   "type": "module",
   "license": "MIT",
-  "bin": { "framegas-mcp": "./src/main.ts" },
+  "main": "./dist/main.js",
+  "bin": {
+    "framegas-mcp": "./dist/main.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/amityadav0/framegas.git",
+    "directory": "mcp"
+  },
+  "homepage": "https://framegas-demo.netlify.app",
+  "bugs": {
+    "url": "https://github.com/amityadav0/framegas/issues"
+  },
+  "keywords": [
+    "ethereum",
+    "gas",
+    "paymaster",
+    "eip-8141",
+    "erc-8421",
+    "alt-mempool",
+    "uniswap-v4",
+    "account-abstraction",
+    "agents",
+    "mcp"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
     "start": "tsx src/main.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
-    "@framegas/sdk": "workspace:*",
+    "@framegas/sdk": "workspace:^",
     "@modelcontextprotocol/sdk": "1.32.2",
     "viem": "^2.57.7",
     "zod": "^4.1.12"

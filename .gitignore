@@ -58,3 +58,7 @@ Thumbs.db
 tmp/
 .cache/
 !cre/simulation.log
+
+# --- build copies ---
+sdk/deployments/
+.npmrc

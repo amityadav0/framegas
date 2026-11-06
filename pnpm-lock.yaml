@@ -74,7 +74,7 @@ importers:
   mcp:
     dependencies:
       '@framegas/sdk':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../sdk
       '@modelcontextprotocol/sdk':
         specifier: 1.32.2

@@ -1,6 +1,12 @@
 # @framegas/sdk
 
-Pay gas in any ERC-20 with EIP-8141 frame transactions. The sender needs no ETH.
+Pay gas in any ERC-20 with EIP-8141 frame transactions. The sender needs no ETH. Runs on the ERC-8421 alt-mempool devnet (chain 1337). Source and docs: <https://github.com/amityadav0/framegas>.
+
+```sh
+pnpm add @framegas/sdk
+```
+
+The deployment current at publish time ships with the package: `import deployment from "@framegas/sdk/deployments/devnet.json" with { type: "json" }`.
 
 ```ts
 import { createFrameGas } from "@framegas/sdk";

@@ -8,9 +8,9 @@ const config: NextConfig = {
   agentRules: false,
   // The demo is recorded from dev mode: no floating dev badge.
   devIndicators: false,
-  // The SDK is a workspace package shipped as TypeScript source.
+  // The SDK is a workspace package; the demo's build script builds its dist/ first.
   transpilePackages: ["@framegas/sdk"],
-  // The SDK's source imports "./x.js" for "./x.ts", as NodeNext requires. Webpack can map that; Turbopack cannot yet.
+  // NodeNext-style "./x.js" imports of "./x.ts": webpack can map them, Turbopack cannot yet.
   webpack(webpackConfig) {
     webpackConfig.resolve.extensionAlias = { ".js": [".ts", ".js"] };
     return webpackConfig;

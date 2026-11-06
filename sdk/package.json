@@ -4,8 +4,49 @@
   "description": "Pay gas in any ERC-20 with EIP-8141 frame transactions, priced and settled on Uniswap v4",
   "type": "module",
   "license": "MIT",
-  "exports": { ".": "./src/index.ts" },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./deployments/devnet.json": "./deployments/devnet.json"
+  },
+  "files": [
+    "dist",
+    "deployments",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/amityadav0/framegas.git",
+    "directory": "sdk"
+  },
+  "homepage": "https://framegas-demo.netlify.app",
+  "bugs": {
+    "url": "https://github.com/amityadav0/framegas/issues"
+  },
+  "keywords": [
+    "ethereum",
+    "gas",
+    "paymaster",
+    "eip-8141",
+    "erc-8421",
+    "alt-mempool",
+    "uniswap-v4",
+    "account-abstraction",
+    "agents",
+    "mcp"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
+    "build": "rm -rf dist deployments && tsc -p tsconfig.build.json && mkdir -p deployments && cp ../deployments/devnet.json deployments/",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p ."
   },

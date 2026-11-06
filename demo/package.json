@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev --webpack",
-    "build": "next build --webpack",
+    "dev": "pnpm --filter @framegas/sdk build && next dev --webpack",
+    "build": "pnpm --filter @framegas/sdk build && next build --webpack",
     "start": "next start",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
