@@ -60,8 +60,69 @@ function admissionCounts(dir: string): Record<string, { passed: number; total: n
   return out;
 }
 
-/** The two transactions sent to both mempools: a user's first, then their second. */
+/** The SDK end-to-end transactions on the current deployment (scripts/08-sdk-live.ts), with their own admission reports. */
+export function loadSdkLiveRuns(dir = evidenceDir()): Run[] {
+  return fs
+    .readdirSync(dir)
+    .filter((f) => /^sdk-live-(bootstrap|normal)-0x[0-9a-f]{64}\.json$/.test(f))
+    .map((file): Run => {
+      const d = JSON.parse(fs.readFileSync(path.join(dir, file), "utf8"));
+      const mode: Run["mode"] = file.includes("bootstrap") ? "bootstrap" : "normal";
+      const receipt: Receipt = d.receipt;
+      const signedFrames: SignedFrame[] = d.admission.entry.tx.frames;
+      const kinds = frameKinds(mode, receipt.frameReceipts.length);
+      const settleFrame = signedFrames[kinds.indexOf("settle")]!;
+      const callFrames = signedFrames.filter((_, i) => kinds[i] === "call");
+      const cap = decodeFunctionData({ abi: settleAbi, data: settleFrame.data }).args[0];
+      const s = settlementFrom(receipt);
+      const fee = BigInt(receipt.gasUsed) * BigInt(receipt.effectiveGasPrice ?? "0x77359400");
+      const eth = (v: bigint) => units(v, 18, 9);
+      const tok = (v: bigint) => units(v, TOKEN_DECIMALS);
+      const checks: { verdict: string }[] = d.admission?.admission?.checks ?? [];
+      const calls = callFrames.map((f) => describeCall(f, "fgUSD"));
+      return {
+        source: "replay",
+        mode,
+        hash: d.txHash,
+        explorerUrl: d.explorer,
+        block: Number(BigInt(receipt.blockNumber)),
+        recordedAt: "2026-11-06",
+        sender: getAddress(receipt.from),
+        token: { symbol: "fgUSD", address: getAddress(callFrames[0]!.target!), decimals: TOKEN_DECIMALS },
+        call: calls.length > 1 ? `${calls[0]}, and ${calls.length - 1} more` : calls[0]!,
+        balances: { tokenBefore: tok(BigInt(d.senderTokenBalance.before)), tokenAfter: tok(BigInt(d.senderTokenBalance.after)), eth: eth(BigInt(d.senderEthBalanceNow)) },
+        cost: { quote: tok(BigInt(d.quoteTokens)), cap: tok(cap), paid: tok(s.paid), refunded: tok(s.refunded), net: tok(s.paid - s.refunded) },
+        paymaster: { maxCost: eth(s.ethBought), bought: eth(s.ethBought), sold: eth(s.ethSold), fee: eth(fee), returned: eth(s.ethBought - fee), delta: eth(s.ethBought - s.ethSold - fee) },
+        canonical: { method: "eth_sendRawTransaction", admitted: d.canonicalMempool.admitted, message: d.canonicalMempool.message },
+        alt: {
+          method: "eth_sendFrameTransaction",
+          admitted: true,
+          message: "admitted",
+          checksPassed: checks.filter((c) => c.verdict === "pass").length,
+          checksTotal: checks.length,
+        },
+        frames: receipt.frameReceipts.map((f, i) => ({
+          kind: kinds[i]!,
+          name: frameName(kinds[i]!),
+          role: frameRole(kinds[i]!),
+          success: f.status === "0x1",
+          gasUsed: BigInt(f.gasUsed).toString(),
+          gasLimit: BigInt(signedFrames[i]?.limits.execution ?? "0x0").toString(),
+          stateGasUsed: BigInt(f.stateGasUsed ?? "0x0").toString(),
+          stateGasLimit: BigInt(signedFrames[i]?.limits.state ?? "0x0").toString(),
+        })),
+      };
+    })
+    .sort((a, b) => (a.mode === b.mode ? 0 : a.mode === "bootstrap" ? -1 : 1));
+}
+
+/** Every recorded run: the current deployment's first, then the 2026-11-05 pair sent to both mempools. */
 export function loadReplayRuns(dir = evidenceDir()): Run[] {
+  return [...loadSdkLiveRuns(dir), ...loadComparisonRuns(dir)];
+}
+
+/** The two transactions sent to both mempools: a user's first, then their second. */
+export function loadComparisonRuns(dir = evidenceDir()): Run[] {
   const quotes = JSON.parse(fs.readFileSync(path.join(dir, "replay-quotes.json"), "utf8")) as Record<
     string,
     { senderTokenBalance: { before: string; after: string }; senderEthBalanceNow: string; quoteTokens: string; maxCostWei: string }

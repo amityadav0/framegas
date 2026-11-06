@@ -1,0 +1,24 @@
+quote first: bootstrap, needs 2.764176, expects 2.379059, 3 simulations
+first transaction, two calls: bootstrap, https://explorer.altmempool.wtf/tx/0x45fcd889938d04890cedf379a8bd83e3e34b818a71ac7975b65c742eaa4e1dd3
+  sender verify        ok     gas    100  state gas 0
+  paymaster validate   ok     gas  56399  state gas 0
+  approve              ok     gas  14472  state gas 97920
+  settle               ok     gas 105426  state gas 0
+  call 0               ok     gas  15074  state gas 0
+  call 1               ok     gas  15074  state gas 97920
+  refund               ok     gas  83524  state gas 0
+  declared: settle 150000/0, calls 18016/0, 18016/97920, refund 96000/0
+  paid 2.643216, refunded 0.310746, reserve 1.162x the fee
+  canonical mempool: rejected: Invalid params: Frame transaction validation-prefix simulation failed: StorageReadNonSender
+quote second: normal, needs 1.654349, expects 1.388631, 2 simulations
+second transaction, two calls: normal, https://explorer.altmempool.wtf/tx/0x08c4836702188f61108cb21f7e0067ef07f2a47e7bc123ceda62cdcf1835b6b7
+  sender verify        ok     gas    100  state gas 0
+  paymaster validate   ok     gas  51679  state gas 0
+  settle               ok     gas 115390  state gas 0
+  call 0               ok     gas  15074  state gas 0
+  call 1               ok     gas  15074  state gas 0
+  refund               ok     gas  77827  state gas 0
+  declared: settle 150000/0, calls 18016/0, 18016/0, refund 90500/0
+  paid 1.581221, refunded 0.196025, reserve 1.191x the fee
+  canonical mempool: rejected: Invalid params: Frame transaction validation-prefix simulation failed: StorageReadNonSender
+first-ever tick crossing: skipped, no paymaster at 0xe475c6cb9da46f34ce7d453ce2310b9995df1564 on this chain (rerun 07-thin-pool.ts and update THIN)

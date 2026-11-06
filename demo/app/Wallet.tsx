@@ -92,6 +92,7 @@ export function Wallet(p: Props) {
               <span className="flex items-center gap-1.5">
                 <span className="font-medium">Tx {i + 1}</span>
                 <Tag>{r.mode}</Tag>
+                <span className="num text-[10.5px] !text-faint">{r.recordedAt}</span>
               </span>
               <span className="block text-muted">{r.call}</span>
             </Choice>

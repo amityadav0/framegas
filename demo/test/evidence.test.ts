@@ -1,12 +1,12 @@
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { evidenceDir, loadReplayRuns } from "../lib/evidence";
+import { evidenceDir, loadComparisonRuns, loadReplayRuns, loadSdkLiveRuns } from "../lib/evidence";
 import { frameKinds, units } from "../lib/run";
 
 const dir = evidenceDir(path.resolve(__dirname, "..", ".."));
 
 describe("replay runs from docs/evidence", () => {
-  const runs = loadReplayRuns(dir);
+  const runs = loadComparisonRuns(dir);
   const [first, second] = runs;
 
   it("has a user's first transaction, then their second", () => {
@@ -63,5 +63,32 @@ describe("helpers", () => {
   it("formats signed amounts", () => {
     expect(units(-1_500_000n, 6)).toBe("-1.500000");
     expect(units(21_988_000_000_000n, 18, 9)).toBe("0.000021988");
+  });
+});
+
+describe("current-deployment runs from scripts/08-sdk-live.ts", () => {
+  const runs = loadSdkLiveRuns(dir);
+  const [first, second] = runs;
+
+  it("lists them first, before the 2026-11-05 pair", () => {
+    expect(loadReplayRuns(dir).slice(0, 2).map((r) => r.hash)).toEqual(runs.map((r) => r.hash));
+    expect(runs.map((r) => [r.mode, r.recordedAt])).toEqual([["bootstrap", "2026-11-06"], ["normal", "2026-11-06"]]);
+  });
+
+  it("counts admission checks from each transaction's own report, with the canonical refusal", () => {
+    for (const r of runs) {
+      expect(r.alt).toMatchObject({ checksPassed: 24, checksTotal: 24 });
+      expect(r.alt.checksNote).toBeUndefined();
+      expect(r.canonical).toMatchObject({ admitted: false });
+      expect(r.canonical!.message).toContain("StorageReadNonSender");
+    }
+  });
+
+  it("has two calls per transaction and a balance that carries from the first to the second", () => {
+    expect(first!.frames.map((f) => f.name)).toEqual(["verify", "validate", "approve", "settle", "call", "call", "refund"]);
+    expect(second!.frames.map((f) => f.name)).toEqual(["verify", "validate", "settle", "call", "call", "refund"]);
+    expect(first!.balances.tokenBefore).toBe("100.000000");
+    expect(first!.balances.tokenAfter).toBe(second!.balances.tokenBefore);
+    expect(first!.cost).toMatchObject({ quote: "2.764176", paid: "2.643216", refunded: "0.310746" });
   });
 });

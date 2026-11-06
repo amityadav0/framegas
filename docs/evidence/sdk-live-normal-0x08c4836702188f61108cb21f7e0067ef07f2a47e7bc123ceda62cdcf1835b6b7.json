@@ -673,5 +673,12 @@
     "transactionHash": "0x08c4836702188f61108cb21f7e0067ef07f2a47e7bc123ceda62cdcf1835b6b7",
     "transactionIndex": "0x0",
     "type": "0x6"
-  }
+  },
+  "quoteTokens": "1654349",
+  "quoteNote": "requiredTokens from framegas.quote just before sending, as printed by scripts/08-sdk-live.ts",
+  "senderTokenBalance": {
+    "before": "96667530",
+    "after": "94282334"
+  },
+  "senderEthBalanceNow": "0x0"
 }
