@@ -1,0 +1,317 @@
+{
+  "paymaster": "0x2fc9a3f25c65d38f83bdb128c23728cc5ef75af8",
+  "quota": "10000000",
+  "rows": [
+    {
+      "label": "A1 first transaction",
+      "mode": "bootstrap",
+      "quota": false,
+      "hash": "0x8f43230f77ebbd567b2cff0239f702a9b1884f4417be937ea4a6c2c51a571140",
+      "block": 1018,
+      "success": true,
+      "validateGasUsed": "56399",
+      "validateGasLimit": "66000",
+      "frames": [
+        {
+          "name": "sender verify",
+          "gasUsed": "100",
+          "gasLimit": "200",
+          "stateGasUsed": "0",
+          "stateGasLimit": "0",
+          "success": true
+        },
+        {
+          "name": "paymaster validate",
+          "gasUsed": "56399",
+          "gasLimit": "66000",
+          "stateGasUsed": "0",
+          "stateGasLimit": "0",
+          "success": true
+        },
+        {
+          "name": "approve",
+          "gasUsed": "14472",
+          "gasLimit": "30000",
+          "stateGasUsed": "97920",
+          "stateGasLimit": "97920",
+          "success": true
+        },
+        {
+          "name": "settle",
+          "gasUsed": "105422",
+          "gasLimit": "150000",
+          "stateGasUsed": "0",
+          "stateGasLimit": "0",
+          "success": true
+        },
+        {
+          "name": "call 0",
+          "gasUsed": "15074",
+          "gasLimit": "18016",
+          "stateGasUsed": "0",
+          "stateGasLimit": "0",
+          "success": true
+        },
+        {
+          "name": "refund",
+          "gasUsed": "79856",
+          "gasLimit": "90500",
+          "stateGasUsed": "0",
+          "stateGasLimit": "0",
+          "success": true
+        }
+      ]
+    },
+    {
+      "label": "A2 second transaction",
+      "mode": "normal",
+      "quota": false,
+      "hash": "0x6a8c4c749e9ca8700c53bb833d835fc05ecdf86b7b7d44b863bdacd2b4cff812",
+      "block": 1021,
+      "success": true,
+      "validateGasUsed": "51679",
+      "validateGasLimit": "60000",
+      "frames": [
+        {
+          "name": "sender verify",
+          "gasUsed": "100",
+          "gasLimit": "200",
+          "stateGasUsed": "0",
+          "stateGasLimit": "0",
+          "success": true
+        },
+        {
+          "name": "paymaster validate",
+          "gasUsed": "51679",
+          "gasLimit": "60000",
+          "stateGasUsed": "0",
+          "stateGasLimit": "0",
+          "success": true
+        },
+        {
+          "name": "settle",
+          "gasUsed": "115426",
+          "gasLimit": "150000",
+          "stateGasUsed": "0",
+          "stateGasLimit": "0",
+          "success": true
+        },
+        {
+          "name": "call 0",
+          "gasUsed": "15074",
+          "gasLimit": "18016",
+          "stateGasUsed": "0",
+          "stateGasLimit": "0",
+          "success": true
+        },
+        {
+          "name": "refund",
+          "gasUsed": "75164",
+          "gasLimit": "85000",
+          "stateGasUsed": "0",
+          "stateGasLimit": "0",
+          "success": true
+        }
+      ]
+    },
+    {
+      "label": "B1 opt-in (setQuota in a bootstrap transaction)",
+      "mode": "bootstrap",
+      "quota": false,
+      "hash": "0xb3e53ed4816645021f579fe68605982015573466b5a1bc5f43f612a9ca86b7f7",
+      "block": 1026,
+      "success": true,
+      "validateGasUsed": "56373",
+      "validateGasLimit": "66000",
+      "frames": [
+        {
+          "name": "sender verify",
+          "gasUsed": "100",
+          "gasLimit": "200",
+          "stateGasUsed": "0",
+          "stateGasLimit": "0",
+          "success": true
+        },
+        {
+          "name": "paymaster validate",
+          "gasUsed": "56373",
+          "gasLimit": "66000",
+          "stateGasUsed": "0",
+          "stateGasLimit": "0",
+          "success": true
+        },
+        {
+          "name": "approve",
+          "gasUsed": "14472",
+          "gasLimit": "30000",
+          "stateGasUsed": "97920",
+          "stateGasLimit": "97920",
+          "success": true
+        },
+        {
+          "name": "settle",
+          "gasUsed": "105550",
+          "gasLimit": "150000",
+          "stateGasUsed": "0",
+          "stateGasLimit": "0",
+          "success": true
+        },
+        {
+          "name": "call 0",
+          "gasUsed": "14109",
+          "gasLimit": "16990",
+          "stateGasUsed": "97920",
+          "stateGasLimit": "97920",
+          "success": true
+        },
+        {
+          "name": "refund",
+          "gasUsed": "80915",
+          "gasLimit": "90500",
+          "stateGasUsed": "0",
+          "stateGasLimit": "0",
+          "success": true
+        }
+      ]
+    },
+    {
+      "label": "B2 bootstrap under quota",
+      "mode": "bootstrap",
+      "quota": true,
+      "hash": "0xc1e6d8b8125467a573e78ab914a25ea237f8e9ffb803db3711f5a3eb66d2f4ce",
+      "block": 1031,
+      "success": true,
+      "validateGasUsed": "56658",
+      "validateGasLimit": "66000",
+      "frames": [
+        {
+          "name": "sender verify",
+          "gasUsed": "100",
+          "gasLimit": "200",
+          "stateGasUsed": "0",
+          "stateGasLimit": "0",
+          "success": true
+        },
+        {
+          "name": "paymaster validate",
+          "gasUsed": "56658",
+          "gasLimit": "66000",
+          "stateGasUsed": "0",
+          "stateGasLimit": "0",
+          "success": true
+        },
+        {
+          "name": "approve",
+          "gasUsed": "14472",
+          "gasLimit": "30000",
+          "stateGasUsed": "0",
+          "stateGasLimit": "97920",
+          "success": true
+        },
+        {
+          "name": "settle",
+          "gasUsed": "116345",
+          "gasLimit": "150000",
+          "stateGasUsed": "0",
+          "stateGasLimit": "0",
+          "success": true
+        },
+        {
+          "name": "call 0",
+          "gasUsed": "15074",
+          "gasLimit": "18016",
+          "stateGasUsed": "0",
+          "stateGasLimit": "0",
+          "success": true
+        },
+        {
+          "name": "refund",
+          "gasUsed": "79888",
+          "gasLimit": "90500",
+          "stateGasUsed": "0",
+          "stateGasLimit": "0",
+          "success": true
+        }
+      ]
+    },
+    {
+      "label": "B3 normal under quota",
+      "mode": "normal",
+      "quota": true,
+      "hash": "0x83a3f639c235f97b94bf729a01d868a0c97feb7cc50c1d7bb8674cb3847a1e46",
+      "block": 1038,
+      "success": true,
+      "validateGasUsed": "51938",
+      "validateGasLimit": "60000",
+      "frames": [
+        {
+          "name": "sender verify",
+          "gasUsed": "100",
+          "gasLimit": "200",
+          "stateGasUsed": "0",
+          "stateGasLimit": "0",
+          "success": true
+        },
+        {
+          "name": "paymaster validate",
+          "gasUsed": "51938",
+          "gasLimit": "60000",
+          "stateGasUsed": "0",
+          "stateGasLimit": "0",
+          "success": true
+        },
+        {
+          "name": "settle",
+          "gasUsed": "126313",
+          "gasLimit": "150000",
+          "stateGasUsed": "0",
+          "stateGasLimit": "0",
+          "success": true
+        },
+        {
+          "name": "call 0",
+          "gasUsed": "15074",
+          "gasLimit": "18016",
+          "stateGasUsed": "0",
+          "stateGasLimit": "0",
+          "success": true
+        },
+        {
+          "name": "refund",
+          "gasUsed": "75256",
+          "gasLimit": "85000",
+          "stateGasUsed": "0",
+          "stateGasLimit": "0",
+          "success": true
+        }
+      ]
+    }
+  ],
+  "remaining": {
+    "active": true,
+    "limit": "10000000",
+    "spent": "3632459",
+    "remaining": "6367541",
+    "epoch": 0,
+    "resetsAtBlock": "8201"
+  },
+  "refusal": "the sender's quota leaves 6367541 this epoch, below 6367542. It resets from block 8201",
+  "baselinePreQuota": {
+    "paymaster": "0x7503ed4e90b0cab850412fd8bf318b8e269f9996",
+    "rows": [
+      {
+        "mode": "bootstrap",
+        "hash": "0x715ae84c97255761412427a732e160db6518e7d2c61fd13be39b87e6d73154a9",
+        "validateGasUsed": "52986",
+        "settleGasUsed": "104457"
+      },
+      {
+        "mode": "normal",
+        "hash": "0x0cd83f6adc761d993402df583cb36483cf3ff20b18da84d56f7233316ff54051",
+        "validateGasUsed": "48594",
+        "settleGasUsed": "114453"
+      }
+    ]
+  },
+  "note": "Rows were sent with validate limits of 60,000 (normal) and 66,000 (bootstrap) to measure; the SDK now declares 55,000 and 60,000."
+}
