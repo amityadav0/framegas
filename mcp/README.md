@@ -37,7 +37,10 @@ If Claude Desktop cannot find `npx`, use the full path from `which npx`.
 | Variable | Required | Meaning |
 | --- | --- | --- |
 | `FRAMEGAS_PRIVATE_KEY` | Yes | The devnet key the tools sign with. Never use a key that holds real funds |
+| `FRAMEGAS_GATEWAY` | No | The alt-mempool node to submit to. Defaults to the miner's own sidecar, <https://altmempool.forshtat.com/rpc>; set `https://altmempoolgateway.forshtat.com/rpc` to use the public gateway |
 | `FRAMEGAS_DEPLOYMENTS` | No | Path to a deployments JSON with the token and paymaster addresses. Defaults to `@framegas/sdk/deployments/devnet.json`, the deployment current when the package was published |
+
+By default the tools submit to the miner's sidecar; `FRAMEGAS_GATEWAY` selects the public gateway.
 
 `npx -y @framegas/mcp --help` prints the same.
 

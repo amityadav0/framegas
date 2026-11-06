@@ -1,6 +1,6 @@
 {
   "name": "@framegas/mcp",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "MCP tools to quote and send gas-in-token transactions with FrameGas",
   "type": "module",
   "license": "MIT",

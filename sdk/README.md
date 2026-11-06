@@ -21,6 +21,8 @@ const result = await framegas.send({ payToken: fgUSD, maxTokenCost: quote.requir
 console.log(result.explorerUrl, result.tokensPaid - result.tokensRefunded);
 ```
 
+**Node.** By default the SDK validates against and submits to the miner's own sidecar, `DEFAULT_NODE_URL` (<https://altmempool.forshtat.com/rpc>). Pass `gatewayUrl: "https://altmempoolgateway.forshtat.com/rpc"` to `createFrameGas` to use the public gateway instead.
+
 ## What `send` does
 
 1. **Picks the mode.** If the sender's allowance to the paymaster covers `maxTokenCost`, the transaction is `validate`, `settle`, your calls, `refund`. Otherwise it adds `approve(paymaster, amount)` before `settle`, still in one transaction. `amount` defaults to 20 times the cap, so the next transactions need no approve frame.
