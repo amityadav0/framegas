@@ -90,6 +90,9 @@ export interface SendResult {
   frames: { name: string; success: boolean; gasUsed: bigint; stateGasUsed: bigint; gasLimit: bigint; stateGasLimit: bigint }[];
   tokensPaid: bigint;
   tokensRefunded: bigint;
+  /** ETH the settle frame bought for the paymaster, and the refund frame sold back. */
+  ethBought: bigint;
+  ethSold: bigint;
   feeWei: bigint;
   maxCostWei: bigint;
   limits: Limits;
@@ -371,13 +374,15 @@ export function createFrameGas(config: FrameGasConfig) {
     const frameReceipts: any[] = receipt.frameReceipts ?? [];
     let tokensPaid = 0n;
     let tokensRefunded = 0n;
+    let ethBought = 0n;
+    let ethSold = 0n;
     for (const frame of frameReceipts) {
       for (const log of frame.logs ?? []) {
         if (getAddress(log.address) !== p.paymaster.address) continue;
         try {
           const event = decodeEventLog({ abi: paymasterAbi, data: log.data, topics: log.topics });
-          if (event.eventName === "Settled") tokensPaid += event.args.tokensPaid;
-          if (event.eventName === "Refunded") tokensRefunded += event.args.tokensReturned;
+          if (event.eventName === "Settled") (tokensPaid += event.args.tokensPaid), (ethBought += event.args.ethBought);
+          if (event.eventName === "Refunded") (tokensRefunded += event.args.tokensReturned), (ethSold += event.args.ethSold);
         } catch {
           // A log this contract emitted that is not settlement, such as a reference update.
         }
@@ -399,6 +404,8 @@ export function createFrameGas(config: FrameGasConfig) {
       })),
       tokensPaid,
       tokensRefunded,
+      ethBought,
+      ethSold,
       feeWei: BigInt(receipt.gasUsed) * BigInt(receipt.effectiveGasPrice ?? maxFeePerGas),
       maxCostWei: p.simulated.maxCost,
       limits: p.limits,
