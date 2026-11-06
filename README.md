@@ -6,7 +6,7 @@
 - Transactions enter through the [ERC-8421 alternative mempool](https://docs.altmempool.wtf/), which admits validation that reads the PoolManager's storage once the paymaster is staked. The canonical mempool refuses the same bytes.
 - No relayer, no sponsor treasury, no off-chain price signer, no owner. Built at ETHGlobal Mumbai, 5–7 Nov 2026, on the alt-mempool devnet (chain 1337). EIP-8141 is scheduled for the Hegotá fork and is not on mainnet.
 
-**Demo:** _URL pending: Vercel deployment of `demo/` in Replay mode._ · **Clips:** [`docs/evidence/video/`](./docs/evidence/video/README.md) · **Findings:** 29 on the devnet versus the rule texts, grouped at the top of [`docs/findings.md`](./docs/findings.md): rule caps (flat 100,000 validation gas), banned opcodes (`GAS`, `TIMESTAMP`), missing precompiles (no `ecrecover` in validation), gateway relay and liveness (halt, transactions relayed an hour late or dropped, dropped-then-mined), explorer memory.
+**Demo:** <https://framegas-demo.netlify.app> (Replay mode) · **Clips:** [`docs/evidence/video/`](./docs/evidence/video/README.md) · **Findings:** 29 on the devnet versus the rule texts, grouped at the top of [`docs/findings.md`](./docs/findings.md): rule caps (flat 100,000 validation gas), banned opcodes (`GAS`, `TIMESTAMP`), missing precompiles (no `ecrecover` in validation), gateway relay and liveness (halt, transactions relayed an hour late or dropped, dropped-then-mined), explorer memory.
 
 ## Quickstart
 
@@ -239,7 +239,7 @@ The paymaster stakes 0.012 ETH in the ERC-8421 staking registry from its constru
 | `contracts/` | Foundry: `FrameGasPaymaster`, `FgUSD`, demo `MockLendingPool`, unit and fuzz tests |
 | `sdk/` | `@framegas/sdk`: simulates for frame limits, quotes, builds, signs, submits |
 | `mcp/` | `@framegas/mcp`: `framegas_quote`, `framegas_send`, `framegas_budget` |
-| `demo/` | Next.js console: Replay from `docs/evidence/` (default, no env vars), Live through the SDK. Vercel: root directory `demo`, build command `pnpm build` |
+| `demo/` | Next.js console: Replay from `docs/evidence/` (default, no env vars), Live through the SDK. Hosting: root directory `demo`, build command `pnpm build` |
 | `scripts/` | `redeploy.sh` and the numbered scripts that reproduce each finding; `10-quota-live.ts` measures the quota |
 | `cre/` | Chainlink CRE workflow: mainnet vs devnet price divergence, see below |
 | `skill/` | Agent skill in the Uniswap AI format, with two eval cases |

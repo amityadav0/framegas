@@ -2,7 +2,7 @@
 
 _Required for the Uniswap Foundation prize. Submit the form at https://developers.uniswap.org/hackathon-feedback with a link to this file._
 
-## What we used
+## What I used
 - 
 
 ## Time to first success

@@ -27,7 +27,7 @@ Recorded from the demo in Replay mode (light theme, 1440×760 window) and a term
 | 1:50–2:02 | Editor or slide with the three SDK lines (README Quickstart) | Static | "For developers it's three lines: create the client, quote, send with a cap." |
 | 2:02–2:15 | Terminal: `cat docs/evidence/sdk-live-output.txt`, scrolling to the two `canonical mempool: rejected` lines | Run `cat` | "This is that run from the SDK: both transactions, every frame ok, and the canonical rejection recorded each time." |
 | 2:15–2:22 | README "MCP server" table: `framegas_quote`, `framegas_budget`, `framegas_send` | Static | "The same three calls are MCP tools, so an agent can pay gas in a token — with an optional daily quota enforced in validation." |
-| 2:22–2:40 | `docs/findings.md` summary line at the top, then row 28 | Scroll slowly | "We logged 29 findings against the rule texts: a flat 100 thousand gas cap even for staked entities, no precompiles in validation, and a gateway that relayed some admitted transactions an hour late or dropped them." |
+| 2:22–2:40 | `docs/findings.md` summary line at the top, then row 28 | Scroll slowly | "I logged 29 findings against the rule texts: a flat 100 thousand gas cap even for staked entities, no precompiles in validation, and a gateway that relayed some admitted transactions an hour late or dropped them." |
 | 2:40–2:52 | README "Limitations" | Static | "Limits: devnet only until Hegotá, the stake is locked because there is no owner, and a failed settlement costs the paymaster at most 0.002 ETH per transaction." |
 | 2:52–3:00 | Demo, Tx 1 mined state, full console | Hold | "FrameGas: gas in any ERC-20, priced and settled on Uniswap v4, admitted by the alt-mempool." |
 

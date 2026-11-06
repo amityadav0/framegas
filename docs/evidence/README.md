@@ -33,9 +33,20 @@ The first-ever tick crossing case was skipped: its thin-pool paymaster from `scr
 
 Smoke tests from the redeploy, same deployment: [`0x7d59…c4ec`](https://explorer.altmempool.wtf/tx/0x7d597a50b7731a50bdf497196bbacc0b4b049e09339048a4ab5a78ae6ce9c4ec) (bootstrap, 3.104546 fgUSD net) and [`0xf46c…87c8`](https://explorer.altmempool.wtf/tx/0xf46c46ce7784c714c09e92e86b39593e67098564da2c15085da84160967587c8) (normal, 1.285609 fgUSD net).
 
-### Clips
+### Video and clips
 
-[`video/`](./video/README.md): an 89 s Replay walkthrough of these two transactions and a 30 s terminal clip of the script's saved output.
+[`video/framegas-demo.mp4`](./video/framegas-demo.mp4): the submission video, 3:06, 1920×1080, recorded from the demo and a terminal following [`video/SHOTLIST.md`](./video/SHOTLIST.md). [`video/`](./video/README.md) also holds an 89 s Replay walkthrough of these two transactions and a 30 s terminal clip of the script's saved output.
+
+### Console screenshots
+
+The demo console at 3200×1800, in Replay mode on these two transactions:
+
+| File | Shows |
+| --- | --- |
+| [`demo/console-signed-light.jpg`](./demo/console-signed-light.jpg) | Tx 2 (normal, `0x08c4…b6b7`) signed, not sent: frames pending, both mempool cards "Not sent", light theme |
+| [`demo/console-bootstrap-light.jpg`](./demo/console-bootstrap-light.jpg) | Tx 1 (bootstrap, `0x45fc…1dd3`) mined: 10/10, every frame succeeded, canonical rejection and 24/24 admission, light theme |
+| [`demo/console-normal-light.jpg`](./demo/console-normal-light.jpg) | Tx 2 (normal, `0x08c4…b6b7`), light theme |
+| [`demo/console-normal-dark.jpg`](./demo/console-normal-dark.jpg) | Tx 2, dark theme |
 
 ### Quota
 
