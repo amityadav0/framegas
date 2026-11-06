@@ -86,7 +86,8 @@ export interface SendResult {
   explorerUrl: string;
   block: number;
   success: boolean;
-  frames: { name: string; success: boolean; gasUsed: bigint; stateGasUsed: bigint }[];
+  /** Every frame in order, with what it declared and what it used. */
+  frames: { name: string; success: boolean; gasUsed: bigint; stateGasUsed: bigint; gasLimit: bigint; stateGasLimit: bigint }[];
   tokensPaid: bigint;
   tokensRefunded: bigint;
   feeWei: bigint;
@@ -109,6 +110,8 @@ interface Plan {
   simulations: number;
   warnings: string[];
   requiredTokens: bigint;
+  /** Each frame's declared limits, in order. */
+  frameLimits: FrameLimit[];
 }
 
 const ok = (status: string | undefined): boolean => status === "0x1";
@@ -277,7 +280,16 @@ export function createFrameGas(config: FrameGasConfig) {
     }
 
     const requiredTokens = await read<bigint>(paymaster.address, paymasterAbi, "quote", [outcome.simulated.maxCost]);
-    return { mode, paymaster, limits: outcome.limits, simulated: outcome.simulated, simulations: outcome.simulations, warnings: outcome.warnings, requiredTokens, build: buildWith };
+    const l = outcome.limits;
+    const frameLimits: FrameLimit[] = [
+      { execution: senderLimit, state: 0n },
+      { execution: mode === "bootstrap" ? VALIDATE_BOOTSTRAP_LIMIT : VALIDATE_LIMIT, state: 0n },
+      ...(mode === "bootstrap" ? [paymaster.floors.approve] : []),
+      l.settle,
+      ...l.calls,
+      ...(l.refund ? [l.refund] : []),
+    ];
+    return { mode, paymaster, limits: l, simulated: outcome.simulated, simulations: outcome.simulations, warnings: outcome.warnings, requiredTokens, frameLimits, build: buildWith };
   }
 
   /** What the sender holds and has approved for a token's paymaster. */
@@ -377,7 +389,14 @@ export function createFrameGas(config: FrameGasConfig) {
       explorerUrl: `${explorerUrl}/tx/${hash}`,
       block: Number(receipt.blockNumber),
       success: ok(receipt.status) && frameReceipts.every((f) => ok(f.status)),
-      frames: frameReceipts.map((f, i) => ({ name: names[i] ?? `frame ${i}`, success: ok(f.status), gasUsed: BigInt(f.gasUsed), stateGasUsed: BigInt(f.stateGasUsed ?? 0) })),
+      frames: frameReceipts.map((f, i) => ({
+        name: names[i] ?? `frame ${i}`,
+        success: ok(f.status),
+        gasUsed: BigInt(f.gasUsed),
+        stateGasUsed: BigInt(f.stateGasUsed ?? 0),
+        gasLimit: p.frameLimits[i]?.execution ?? 0n,
+        stateGasLimit: p.frameLimits[i]?.state ?? 0n,
+      })),
       tokensPaid,
       tokensRefunded,
       feeWei: BigInt(receipt.gasUsed) * BigInt(receipt.effectiveGasPrice ?? maxFeePerGas),

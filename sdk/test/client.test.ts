@@ -17,6 +17,8 @@ interface World {
   quote?: bigint;
   simulate?: (raw: Hex) => RawSimulation;
   reject?: string;
+  /** How many frame receipts the mined transaction has. */
+  mined?: number;
 }
 
 const good = (frameCount: number): RawSimulation => ({
@@ -59,7 +61,7 @@ function world(w: World) {
       }
       if (method === "eth_sendRawTransaction") throw new Error("Frame transaction validation-prefix simulation failed: StorageReadNonSender");
       if (method === "eth_getTransactionReceipt") {
-        return { status: "0x1", blockNumber: "0x10", gasUsed: "0x41eb0", effectiveGasPrice: "0x77359400", frameReceipts: [] };
+        return { status: "0x1", blockNumber: "0x10", gasUsed: "0x41eb0", effectiveGasPrice: "0x77359400", frameReceipts: Array.from({ length: w.mined ?? 0 }, () => ({ status: "0x1", gasUsed: "0x64", logs: [] })) };
       }
       throw new Error(`unexpected ${method}`);
     },
@@ -81,6 +83,16 @@ describe("send", () => {
     const { client } = world({ allowance: 0n });
     const out = await client.send({ payToken: TOKEN, maxTokenCost: cap, calls: [CALL] });
     expect(out.mode).toBe("bootstrap");
+  });
+
+  it("reports every frame's declared limits next to what it used", async () => {
+    const { client } = world({ allowance: 0n, mined: 6 });
+    const out = await client.send({ payToken: TOKEN, maxTokenCost: cap, calls: [CALL] });
+    expect(out.frames.map((f) => f.name)).toEqual(["sender verify", "paymaster validate", "approve", "settle", "call 0", "refund"]);
+    expect(out.frames[0]!.gasLimit).toBe(200n);
+    expect(out.frames[1]!.gasLimit).toBe(54_000n);
+    expect(out.frames[2]).toMatchObject({ gasLimit: 30_000n, stateGasLimit: 97_920n });
+    expect(out.frames.every((f) => f.gasLimit > 0n)).toBe(true);
   });
 
   it("uses normal mode when the allowance covers the cap", async () => {
