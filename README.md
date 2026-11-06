@@ -97,7 +97,7 @@ pnpm exec tsx scripts/08-sdk-live.ts # the SDK end to end on the devnet
 
 Deployment needs about 0.085 ETH of devnet ETH, which it cannot recover. The deployer key is generated into the git-ignored `.env` on first use.
 
-**Demo page.** `pnpm --filter @framegas/demo dev`, then open <http://localhost:3000>. Replay mode needs nothing else: it plays the transactions recorded in `docs/evidence/`. Live mode turns on when the devnet is producing blocks and the server has `FRAMEGAS_DEMO_KEY`, a devnet key holding the token and no ETH.
+**Demo page.** `pnpm --filter @framegas/demo dev`, then open <http://localhost:3000>. Replay mode needs nothing else: it steps through a user's first and second transactions as recorded in `docs/evidence/`, frame by frame, with both mempools' answers to the same signed bytes (← → to step, space to play). The quote each was validated against is recovered from pool logs by `scripts/09-replay-quotes.ts`. Live mode turns on when the devnet is producing blocks, the server has `FRAMEGAS_DEMO_KEY` (a devnet key holding the token and no ETH), and the deployment includes the demo's swap router and mock lending pool, which `redeploy.sh` deploys. Screenshots: [`docs/evidence/demo/`](./docs/evidence/demo/).
 
 **MCP server.** Add it to an MCP client:
 
