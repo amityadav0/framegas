@@ -1,5 +1,7 @@
 # Findings: alt-mempool rules on the devnet
 
+**Summary, 29 findings by category:** rule caps (flat 100,000 validation gas for staked entities too, rows 1–3, 27) · banned opcodes (`GAS` banned yet compiled calls pass, row 15; `TIMESTAMP` banned, so permits must not expire, see [Limitations](#limitations-from-the-validation-rules)) · missing precompiles (all rejected in validation, so no `ecrecover`, row 18) · gateway relay and liveness (chain halt, admitted transactions never relayed to the miner, dropped-then-mined, rows 24, 25, 28, 29) · explorer memory (history lost on restart, rows 26, 29) · rule-text drift and devnet docs (rows 4–14, 16, 17, 19–23).
+
 Observed behaviour on the devnet compared with the two rule texts it is measured against.
 
 | Reference | Revision |
