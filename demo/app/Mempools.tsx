@@ -31,7 +31,7 @@ function Card({ title, verdict, children }: { title: string; verdict: React.Reac
 export function Mempools({ run, strip }: { run: Run | null; strip: StripState }) {
   const sent = run !== null && mempoolsAnswered(strip);
   const done = run !== null && mined(strip);
-  const waiting = <Tag>{strip.sending ? "sending" : "not sent"}</Tag>;
+  const waiting = <Tag>{strip.sending ? "sending" : strip.submitted ? "sent" : "not sent"}</Tag>;
   const okFrames = run?.frames.filter((f) => f.success).length ?? 0;
 
   return (

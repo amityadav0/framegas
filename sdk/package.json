@@ -1,6 +1,6 @@
 {
   "name": "@framegas/sdk",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Pay gas in any ERC-20 with EIP-8141 frame transactions, priced and settled on Uniswap v4",
   "type": "module",
   "license": "MIT",

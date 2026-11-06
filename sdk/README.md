@@ -30,6 +30,22 @@ console.log(result.explorerUrl, result.tokensPaid - result.tokensRefunded);
 
 Nothing is sent when simulation says settlement or a call would fail.
 
+## Submit now, collect later
+
+`send` is `collect(await submit(req))`. Call the two halves yourself when the process that sends cannot wait for a block, such as a serverless function with a 10-second limit:
+
+```ts
+const submitted = await framegas.submit({ payToken: fgUSD, maxTokenCost, calls });
+// submitted.hash, submitted.explorerUrl, submitted.canonicalMempool, submitted.frameNames, submitted.frameLimits
+
+const result = await framegas.collect(submitted, { timeoutMs: 3_000 }); // a SendResult, or NOT_MINED after 3 s
+```
+
+- **`submit(req)`** takes the same request as `send` and does steps 1–4 up to the broadcast. It returns a `Submitted` as soon as the alt-mempool admits the transaction, with the hash, both mempools' answers, the mode, and each frame's name and limits. Errors are the same as for `send`, apart from `NOT_MINED`.
+- **`collect(submitted, { timeoutMs })`** waits for the receipt and reads the settlement from the paymaster's events. `timeoutMs` defaults to the client's `mineTimeoutMs`. On `NOT_MINED` the transaction may still be mined, so call `collect` again with the same `Submitted`.
+
+`collect` needs only the `Submitted` and a client for the same chain, so it can run in a different process from `submit`. `Submitted` holds bigints: encode them when you send it as JSON (the demo writes them as `"123n"` strings and decodes them on the way back).
+
 ## Errors
 
 Every failure is a `FrameGasError` with a `code`:
@@ -45,7 +61,7 @@ Every failure is a `FrameGasError` with a `code`:
 | `SETTLEMENT_WILL_FAIL` | Settlement fails in simulation at every limit, usually because the pool is too thin |
 | `CALL_WILL_REVERT` | A call reverts in simulation at every limit. `details.callIndex` says which |
 | `REJECTED` | The alt-mempool refused it. The paymaster's error is decoded when there is one |
-| `NOT_MINED` | Admitted, but not mined within 10 minutes. It may still be mined |
+| `NOT_MINED` | Admitted, but not mined within `mineTimeoutMs` (default 10 minutes) or `collect`'s `timeoutMs`. It may still be mined: `details.hash` |
 
 ## Options
 

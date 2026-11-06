@@ -119,6 +119,21 @@ export interface SendResult {
   canonicalMempool?: MempoolAnswer;
 }
 
+/** A transaction the alt-mempool has accepted, before it is mined. `collect` turns it into a `SendResult`. */
+export interface Submitted {
+  mode: Mode;
+  hash: Hex;
+  explorerUrl: string;
+  canonicalMempool?: MempoolAnswer;
+  paymaster: Address;
+  /** Every frame's name, in order. */
+  frameNames: string[];
+  frameLimits: FrameLimit[];
+  maxCostWei: bigint;
+  limits: Limits;
+  warnings: string[];
+}
+
 interface Paymaster {
   address: Address;
   floors: { settle: FrameLimit; approve: FrameLimit; refundBase: bigint; refundPerFrame: bigint };
@@ -384,8 +399,13 @@ export function createFrameGas(config: FrameGasConfig) {
     return { mode: p.mode, requiredTokens: p.requiredTokens, estimatedTokens, maxCostWei, estimatedFeeWei, limits: p.limits, simulations: p.simulations, warnings: p.warnings };
   }
 
-  /** Simulates, then quotes, builds, signs and broadcasts. Raises before sending when the simulation says it would fail. */
+  /** Simulates, then quotes, builds, signs and broadcasts, then waits for the receipt. Raises before sending when the simulation says it would fail. */
   async function send(req: SendRequest): Promise<SendResult> {
+    return collect(await submit(req));
+  }
+
+  /** The first half of `send`: everything up to and including broadcast. Returns as soon as the alt-mempool admits the transaction. */
+  async function submit(req: SendRequest): Promise<Submitted> {
     const p = await plan(req, req.maxTokenCost, req.approveAmount);
     if (req.maxTokenCost < p.requiredTokens) {
       throw new FrameGasError("CAP_TOO_LOW", `this transaction needs a maxTokenCost of at least ${p.requiredTokens}`, { requiredTokens: p.requiredTokens, maxTokenCost: req.maxTokenCost });
@@ -409,8 +429,18 @@ export function createFrameGas(config: FrameGasConfig) {
       throw new FrameGasError("REJECTED", `the alt-mempool rejected the transaction: ${decoded ? decoded.name : message}`, { message, decoded });
     }
 
-    const receipt = await waitForReceipt(hash);
-    return summarise(hash, receipt, p, req, canonicalMempool);
+    const frameNames = ["sender verify", "paymaster validate", ...(p.mode === "bootstrap" ? ["approve"] : []), "settle", ...req.calls.map((_, i) => `call ${i}`), ...(p.limits.refund ? ["refund"] : [])];
+    return { mode: p.mode, hash, explorerUrl: `${explorerUrl}/tx/${hash}`, canonicalMempool, paymaster: p.paymaster.address, frameNames, frameLimits: p.frameLimits, maxCostWei: p.simulated.maxCost, limits: p.limits, warnings: p.warnings };
+  }
+
+  /**
+   * The second half of `send`: waits for the receipt and reads the settlement from it. Raises `NOT_MINED` after
+   * `timeoutMs` (default: the client's `mineTimeoutMs`); the transaction may still be mined later, so `collect` can
+   * be called again with the same `Submitted`, from another process if need be.
+   */
+  async function collect(submitted: Submitted, opts: { timeoutMs?: number } = {}): Promise<SendResult> {
+    const receipt = await waitForReceipt(submitted.hash, opts.timeoutMs);
+    return summarise(submitted, receipt);
   }
 
   async function tryCanonical(raw: Hex): Promise<MempoolAnswer> {
@@ -422,8 +452,8 @@ export function createFrameGas(config: FrameGasConfig) {
     }
   }
 
-  async function waitForReceipt(hash: Hex): Promise<any> {
-    const deadline = Date.now() + (config.mineTimeoutMs ?? DEFAULT_MINE_TIMEOUT_MS);
+  async function waitForReceipt(hash: Hex, timeoutMs?: number): Promise<any> {
+    const deadline = Date.now() + (timeoutMs ?? config.mineTimeoutMs ?? DEFAULT_MINE_TIMEOUT_MS);
     for (;;) {
       const receipt = await chain.rpc("eth_getTransactionReceipt", [hash]);
       if (receipt) return receipt;
@@ -434,8 +464,7 @@ export function createFrameGas(config: FrameGasConfig) {
     }
   }
 
-  function summarise(hash: Hex, receipt: any, p: Plan, req: SendRequest, canonicalMempool: MempoolAnswer | undefined): SendResult {
-    const names = ["sender verify", "paymaster validate", ...(p.mode === "bootstrap" ? ["approve"] : []), "settle", ...req.calls.map((_, i) => `call ${i}`), ...(p.limits.refund ? ["refund"] : [])];
+  function summarise(s: Submitted, receipt: any): SendResult {
     const frameReceipts: any[] = receipt.frameReceipts ?? [];
     let tokensPaid = 0n;
     let tokensRefunded = 0n;
@@ -443,7 +472,7 @@ export function createFrameGas(config: FrameGasConfig) {
     let ethSold = 0n;
     for (const frame of frameReceipts) {
       for (const log of frame.logs ?? []) {
-        if (getAddress(log.address) !== p.paymaster.address) continue;
+        if (getAddress(log.address) !== s.paymaster) continue;
         try {
           const event = decodeEventLog({ abi: paymasterAbi, data: log.data, topics: log.topics });
           if (event.eventName === "Settled") (tokensPaid += event.args.tokensPaid), (ethBought += event.args.ethBought);
@@ -454,32 +483,32 @@ export function createFrameGas(config: FrameGasConfig) {
       }
     }
     return {
-      mode: p.mode,
-      hash,
-      explorerUrl: `${explorerUrl}/tx/${hash}`,
+      mode: s.mode,
+      hash: s.hash,
+      explorerUrl: s.explorerUrl,
       block: Number(receipt.blockNumber),
       success: ok(receipt.status) && frameReceipts.every((f) => ok(f.status)),
       frames: frameReceipts.map((f, i) => ({
-        name: names[i] ?? `frame ${i}`,
+        name: s.frameNames[i] ?? `frame ${i}`,
         success: ok(f.status),
         gasUsed: BigInt(f.gasUsed),
         stateGasUsed: BigInt(f.stateGasUsed ?? 0),
-        gasLimit: p.frameLimits[i]?.execution ?? 0n,
-        stateGasLimit: p.frameLimits[i]?.state ?? 0n,
+        gasLimit: s.frameLimits[i]?.execution ?? 0n,
+        stateGasLimit: s.frameLimits[i]?.state ?? 0n,
       })),
       tokensPaid,
       tokensRefunded,
       ethBought,
       ethSold,
       feeWei: BigInt(receipt.gasUsed) * BigInt(receipt.effectiveGasPrice ?? maxFeePerGas),
-      maxCostWei: p.simulated.maxCost,
-      limits: p.limits,
-      warnings: p.warnings,
-      canonicalMempool,
+      maxCostWei: s.maxCostWei,
+      limits: s.limits,
+      warnings: s.warnings,
+      canonicalMempool: s.canonicalMempool,
     };
   }
 
-  return { quote, send, account, quoteRemaining, sender };
+  return { quote, send, submit, collect, account, quoteRemaining, sender };
 }
 
 export type FrameGas = ReturnType<typeof createFrameGas>;

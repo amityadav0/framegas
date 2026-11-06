@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useReducer, useState } from "react";
+import type { Handoff } from "../lib/live";
 import type { Run } from "../lib/run";
 import { initialStrip, mined, stripReducer } from "../lib/strip";
 import { Header, type Pending, type Status } from "./Header";
@@ -18,6 +19,8 @@ export function Console({ replay }: { replay: Run[] }) {
   const [form, setForm] = useState<LiveForm>({ token: "fgUSD", preset: "swap", cap: "", quote: null, quoting: false });
   const [error, setError] = useState<{ code: string; message: string } | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
+  /** A live send the alt-mempool admitted: collected from `/api/collect` until it is mined. */
+  const [handoff, setHandoff] = useState<Handoff | null>(null);
   const run = mode === "replay" ? (replay[selected] ?? null) : liveRun;
 
   // Gateway status: chain height, block age, whether live mode can work.
@@ -73,9 +76,39 @@ export function Console({ replay }: { replay: Run[] }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [strip.playing]);
 
+  // A live transaction the alt-mempool admitted: collect it once it is mined. Each poll is one short request, which
+  // is what a hosted function allows; the page, not the server, does the waiting.
+  useEffect(() => {
+    if (!handoff) return;
+    let stop = false;
+    const collect = async () => {
+      try {
+        const res = await fetch("/api/collect", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...handoff, token: form.token }) });
+        const body = await res.json();
+        if (stop) return;
+        if (res.status === 200) {
+          setHandoff(null);
+          setPending(null);
+          setLiveRun(body as Run);
+          dispatch({ type: "load", outcomes: (body as Run).frames.map((f) => f.success), play: true });
+        } else if (res.status === 202 && body.pending) {
+          const p = body.pending as { state: Pending["state"] | "mined"; admittedAt?: number };
+          if (p.state !== "mined") setPending({ hash: handoff.hash, state: p.state, admittedAt: p.admittedAt ? Math.floor(p.admittedAt / 1000) : handoff.submittedAt });
+        } else {
+          setHandoff(null);
+          dispatch({ type: "failed" });
+          setError(body.error ?? { code: "COLLECT", message: `collect answered ${res.status}` });
+        }
+      } catch {} // keep polling: the next attempt may succeed
+    };
+    collect();
+    const t = setInterval(collect, 4_000);
+    return () => void ((stop = true), clearInterval(t));
+  }, [handoff, form.token]);
+
   // A live transaction the SDK gave up waiting for: ask where it is until it is mined or dropped.
   useEffect(() => {
-    if (!pending || pending.state === "dropped") return;
+    if (!pending || pending.state === "dropped" || handoff) return;
     let stop = false;
     const check = async () => {
       try {
@@ -88,7 +121,7 @@ export function Console({ replay }: { replay: Run[] }) {
     check();
     const t = setInterval(check, 10_000);
     return () => void ((stop = true), clearInterval(t));
-  }, [pending?.hash, pending?.state]);
+  }, [pending?.hash, pending?.state, handoff]);
 
   // Live: quote the chosen preset and prefill maxTokenCost.
   useEffect(() => {
@@ -122,14 +155,22 @@ export function Console({ replay }: { replay: Run[] }) {
     }
     setLiveRun(null);
     setPending(null);
+    setHandoff(null);
     dispatch({ type: "sending" });
     try {
       const res = await fetch("/api/send", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ token: form.token, preset: form.preset, maxTokenCost: form.cap }),
+        body: JSON.stringify({ token: form.token, preset: form.preset, maxTokenCost: form.cap, quote: form.quote }),
       });
       const body = await res.json();
+      if (res.status === 202) {
+        // Admitted. The run arrives from /api/collect once a block includes it.
+        dispatch({ type: "submitted" });
+        setPending({ hash: (body as Handoff).hash, state: "relayed", admittedAt: (body as Handoff).submittedAt });
+        setHandoff(body as Handoff);
+        return;
+      }
       if (!res.ok) {
         dispatch({ type: "failed" });
         setError(body.error);
@@ -144,7 +185,7 @@ export function Console({ replay }: { replay: Run[] }) {
       dispatch({ type: "failed" });
       setError({ code: "NETWORK", message: String(e) });
     }
-  }, [mode, form.token, form.preset, form.cap]);
+  }, [mode, form.token, form.preset, form.cap, form.quote]);
 
   return (
     <main className="mx-auto max-w-[1440px] px-4 sm:px-6 py-4">

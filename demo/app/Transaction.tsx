@@ -52,7 +52,7 @@ export function Transaction({ run, strip, dispatch }: { run: Run | null; strip: 
   if (!run) {
     return (
       <Panel title="Transaction">
-        <p className="px-3 py-8 text-center text-muted">{strip.sending ? "Simulating, signing and submitting…" : "Choose an action and send it."}</p>
+        <p className="px-3 py-8 text-center text-muted">{strip.sending ? "Simulating, signing and submitting…" : strip.submitted ? "Admitted by the alt-mempool · waiting for the miner to include it…" : "Choose an action and send it."}</p>
       </Panel>
     );
   }

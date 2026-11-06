@@ -1,5 +1,5 @@
 /** Live mode: quotes and sends through the SDK. Kept free of Next.js so it can be tested against a fake gateway. */
-import { erc20Abi, FrameGasError, type Chain, type FrameGas, type SendResult } from "@framegas/sdk";
+import { erc20Abi, FrameGasError, type Chain, type FrameGas, type SendResult, type Submitted } from "@framegas/sdk";
 import type { Address } from "viem";
 import { presetCalls, type PresetContext, type PresetId } from "./presets";
 import { frameKinds, frameName, frameRole, units, type Run } from "./run";
@@ -111,6 +111,72 @@ export async function sendLive(framegas: FrameGas, chain: Chain, ctx: PresetCont
     const r = await framegas.send({ payToken: ctx.token.address, maxTokenCost: cap, calls, compareMempools: true });
     const [after, checks] = await Promise.all([readBalances(chain, ctx.token.address, ctx.sender), admissionChecks(chain, r.hash)]);
     return { ok: true, value: liveRun(r, ctx, { quote: q.requiredTokens, cap, call: label, before, after, checks }) };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/**
+ * What `/api/send` hands the browser once the alt-mempool admits a transaction, and the browser hands back to
+ * `/api/collect` until it is mined. Hosted functions are cut off after about ten seconds, so the wait for a block
+ * cannot live in the request that sent the transaction. Bigints travel as decimal strings.
+ */
+export interface Handoff {
+  submitted: unknown;
+  hash: string;
+  explorerUrl: string;
+  canonical: { method: "eth_sendRawTransaction"; admitted: boolean; message: string } | null;
+  quote: string;
+  cap: string;
+  call: string;
+  before: { token: string; eth: string };
+  /** Unix seconds. */
+  submittedAt: number;
+}
+
+const BIG = /^-?\d+n$/;
+export const pack = (v: unknown): unknown => JSON.parse(JSON.stringify(v, (_, x) => (typeof x === "bigint" ? `${x}n` : x)));
+export const unpack = <T,>(v: unknown): T => JSON.parse(JSON.stringify(v), (_, x) => (typeof x === "string" && BIG.test(x) ? BigInt(x.slice(0, -1)) : x)) as T;
+
+/** Simulates, signs and broadcasts, and returns as soon as the alt-mempool answers. `quote` is what the page showed the user, in base units. */
+export async function submitLive(framegas: FrameGas, chain: Chain, ctx: PresetContext, preset: PresetId, cap: bigint, quote: bigint): Promise<Outcome<Handoff>> {
+  try {
+    const { calls, label } = presetCalls(preset, ctx);
+    const before = await readBalances(chain, ctx.token.address, ctx.sender);
+    const s = await framegas.submit({ payToken: ctx.token.address, maxTokenCost: cap, calls, compareMempools: true });
+    return {
+      ok: true,
+      value: {
+        submitted: pack(s),
+        hash: s.hash,
+        explorerUrl: s.explorerUrl,
+        canonical: s.canonicalMempool ? { method: "eth_sendRawTransaction", ...s.canonicalMempool } : null,
+        quote: quote.toString(),
+        cap: cap.toString(),
+        call: label,
+        before: { token: before.token.toString(), eth: before.eth.toString() },
+        submittedAt: Math.floor(Date.now() / 1000),
+      },
+    };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** Polls once for the receipt, for at most `timeoutMs`. Mined: the full run. Not yet: `null`, and the caller asks again. */
+export async function collectLive(framegas: FrameGas, chain: Chain, ctx: PresetContext, h: Handoff, timeoutMs: number): Promise<Outcome<Run | null>> {
+  try {
+    const submitted = unpack<Submitted>(h.submitted);
+    let r: SendResult;
+    try {
+      r = await framegas.collect(submitted, { timeoutMs });
+    } catch (e) {
+      if (e instanceof FrameGasError && e.code === "NOT_MINED") return { ok: true, value: null };
+      throw e;
+    }
+    const [after, checks] = await Promise.all([readBalances(chain, ctx.token.address, ctx.sender), admissionChecks(chain, r.hash)]);
+    const before = { token: BigInt(h.before.token), eth: BigInt(h.before.eth) };
+    return { ok: true, value: liveRun(r, ctx, { quote: BigInt(h.quote), cap: BigInt(h.cap), call: h.call, before, after, checks }) };
   } catch (e) {
     return fail(e);
   }

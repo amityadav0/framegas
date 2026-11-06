@@ -19,6 +19,8 @@ interface World {
   reject?: string;
   /** How many frame receipts the mined transaction has. */
   mined?: number;
+  /** How many receipt polls return nothing before the transaction is mined. */
+  receiptDelay?: number;
   /** `quotaOf(sender)`: limit, spent, remaining. */
   quota?: readonly [bigint, bigint, bigint];
 }
@@ -67,6 +69,7 @@ function world(w: World) {
       }
       if (method === "eth_sendRawTransaction") throw new Error("Frame transaction validation-prefix simulation failed: StorageReadNonSender");
       if (method === "eth_getTransactionReceipt") {
+        if (w.receiptDelay && w.receiptDelay-- > 0) return null;
         return { status: "0x1", blockNumber: "0x10", gasUsed: "0x41eb0", effectiveGasPrice: "0x77359400", frameReceipts: Array.from({ length: w.mined ?? 0 }, () => ({ status: "0x1", gasUsed: "0x64", logs: [] })) };
       }
       throw new Error(`unexpected ${method}`);
@@ -83,6 +86,33 @@ const expectCode = async (p: Promise<unknown>, code: string) => {
   expect((error as FrameGasError).code).toBe(code);
   return error as FrameGasError;
 };
+
+describe("submit and collect", () => {
+  it("returns the hash and the mempools' answers before the transaction is mined, and collects it later", async () => {
+    const { client, sent } = world({ allowance: cap, mined: 5, receiptDelay: 3 });
+    const submitted = await client.submit({ payToken: TOKEN, maxTokenCost: cap, calls: [CALL], compareMempools: true });
+    expect(submitted.hash).toBe("0xabc");
+    expect(submitted.mode).toBe("normal");
+    expect(submitted.canonicalMempool?.admitted).toBe(false);
+    expect(submitted.frameNames).toEqual(["sender verify", "paymaster validate", "settle", "call 0", "refund"]);
+    expect(sent.filter((m) => m === "eth_getTransactionReceipt")).toHaveLength(0);
+
+    await expect(client.collect(submitted, { timeoutMs: 0 })).rejects.toMatchObject({ code: "NOT_MINED" });
+    const out = await client.collect(submitted);
+    expect(out.block).toBe(16);
+    expect(out.frames).toHaveLength(5);
+    expect(out.frames[2]!.name).toBe("settle");
+    expect(out.canonicalMempool?.admitted).toBe(false);
+  });
+
+  it("survives a round trip through JSON, so another process can collect", async () => {
+    const { client } = world({ allowance: cap, mined: 5 });
+    const submitted = await client.submit({ payToken: TOKEN, maxTokenCost: cap, calls: [CALL] });
+    const copy = JSON.parse(JSON.stringify(submitted, (_, v) => (typeof v === "bigint" ? `${v}n` : v)), (_, v) => (typeof v === "string" && /^\d+n$/.test(v) ? BigInt(v.slice(0, -1)) : v));
+    const out = await client.collect(copy);
+    expect(out.frames[3]!.gasLimit).toBe(submitted.frameLimits[3]!.execution);
+  });
+});
 
 describe("send", () => {
   it("detects a first transaction from the allowance, and sends an approve frame", async () => {

@@ -18,11 +18,14 @@ export interface StripState {
   playing: boolean;
   /** A live send is in flight: simulation, signing and submission happen before any outcome is known. */
   sending: boolean;
+  /** The alt-mempool admitted a live send and the page is waiting for a block. */
+  submitted: boolean;
 }
 
 export type StripAction =
   | { type: "load"; outcomes: boolean[]; play?: boolean }
   | { type: "sending" }
+  | { type: "submitted" }
   | { type: "failed" }
   | { type: "next" }
   | { type: "prev" }
@@ -31,7 +34,7 @@ export type StripAction =
   | { type: "play" }
   | { type: "pause" };
 
-export const initialStrip: StripState = { outcomes: [], position: -1, playing: false, sending: false };
+export const initialStrip: StripState = { outcomes: [], position: -1, playing: false, sending: false, submitted: false };
 
 export const lastPosition = (s: StripState): number => s.outcomes.length + 1;
 
@@ -39,11 +42,13 @@ export function stripReducer(s: StripState, a: StripAction): StripState {
   const last = lastPosition(s);
   switch (a.type) {
     case "load":
-      return { outcomes: a.outcomes, position: -1, playing: a.play ?? false, sending: false };
+      return { outcomes: a.outcomes, position: -1, playing: a.play ?? false, sending: false, submitted: false };
     case "sending":
       return { ...initialStrip, sending: true };
+    case "submitted":
+      return { ...initialStrip, submitted: true };
     case "failed":
-      return { ...s, sending: false, playing: false };
+      return { ...s, sending: false, submitted: false, playing: false };
     case "next": {
       if (s.outcomes.length === 0) return s;
       const position = Math.min(s.position + 1, last);

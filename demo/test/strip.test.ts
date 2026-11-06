@@ -99,3 +99,14 @@ describe("frame strip", () => {
     expect(s.outcomes.length).toBe(5);
   });
 });
+
+describe("live send phases", () => {
+  it("moves from sending to submitted, and a load clears both", () => {
+    const sending = stripReducer(initialStrip, { type: "sending" });
+    expect(sending).toMatchObject({ sending: true, submitted: false });
+    const submitted = stripReducer(sending, { type: "submitted" });
+    expect(submitted).toMatchObject({ sending: false, submitted: true, outcomes: [] });
+    expect(stripReducer(submitted, { type: "failed" })).toMatchObject({ sending: false, submitted: false });
+    expect(stripReducer(submitted, { type: "load", outcomes: [true, true] })).toMatchObject({ submitted: false, outcomes: [true, true] });
+  });
+});
