@@ -33,6 +33,10 @@ The first-ever tick crossing case was skipped: its thin-pool paymaster from `scr
 
 Smoke tests from the redeploy, same deployment: [`0x7d59…c4ec`](https://explorer.altmempool.wtf/tx/0x7d597a50b7731a50bdf497196bbacc0b4b049e09339048a4ab5a78ae6ce9c4ec) (bootstrap, 3.104546 fgUSD net) and [`0xf46c…87c8`](https://explorer.altmempool.wtf/tx/0xf46c46ce7784c714c09e92e86b39593e67098564da2c15085da84160967587c8) (normal, 1.285609 fgUSD net).
 
+### Clips
+
+[`video/`](./video/README.md): an 89 s Replay walkthrough of these two transactions and a 30 s terminal clip of the script's saved output.
+
 ### Quota
 
 [`quota-live.json`](./quota-live.json): validation and settle gas with and without a quota, on the paymaster deployed before this redeploy (`0x2fc9…f8`), same chain.

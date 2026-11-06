@@ -160,6 +160,7 @@ The devnet was reset on 2026-11-06, and its explorer keeps history in memory, so
 | Quota: opt-in inside a bootstrap transaction | [`0xb3e5…b7f7`](https://explorer.altmempool.wtf/tx/0xb3e53ed4816645021f579fe68605982015573466b5a1bc5f43f612a9ca86b7f7), block 1026 | `docs/evidence/quota-live.json` |
 | Quota: bootstrap and normal transactions under a 10 fgUSD quota | [`0x83a3…1e46`](https://explorer.altmempool.wtf/tx/0x83a3f639c235f97b94bf729a01d868a0c97feb7cc50c1d7bb8674cb3847a1e46) (normal), block 1038 | `docs/evidence/quota-live.json` |
 | Demo replay screenshots, both modes, light and dark | | [`docs/evidence/demo/`](./docs/evidence/demo/) |
+| Demo clip (Replay, 89 s) and terminal clip of `08-sdk-live.ts` output (30 s) | | [`docs/evidence/video/`](./docs/evidence/video/README.md) |
 
 **Canonical rejection.** `eth_sendRawTransaction` with the signed bytes of `0x6e76…4ff7` returned:
 
