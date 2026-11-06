@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useReducer, useState } from "react";
 import type { Run } from "../lib/run";
 import { initialStrip, mined, stripReducer } from "../lib/strip";
-import { Header, type Status } from "./Header";
+import { Header, type Pending, type Status } from "./Header";
 import { Mempools } from "./Mempools";
 import { Transaction } from "./Transaction";
 import { Wallet, type LiveForm } from "./Wallet";
@@ -17,6 +17,7 @@ export function Console({ replay }: { replay: Run[] }) {
   const [strip, dispatch] = useReducer(stripReducer, initialStrip);
   const [form, setForm] = useState<LiveForm>({ token: "fgUSD", preset: "swap", cap: "", quote: null, quoting: false });
   const [error, setError] = useState<{ code: string; message: string } | null>(null);
+  const [pending, setPending] = useState<Pending | null>(null);
   const run = mode === "replay" ? (replay[selected] ?? null) : liveRun;
 
   // Gateway status: chain height, block age, whether live mode can work.
@@ -72,6 +73,23 @@ export function Console({ replay }: { replay: Run[] }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [strip.playing]);
 
+  // A live transaction the SDK gave up waiting for: ask where it is until it is mined or dropped.
+  useEffect(() => {
+    if (!pending || pending.state === "dropped") return;
+    let stop = false;
+    const check = async () => {
+      try {
+        const p = (await (await fetch(`/api/pending?hash=${pending.hash}`, { cache: "no-store" })).json()) as { state: string; block?: number; admittedAt?: number };
+        if (stop) return;
+        if (p.state === "mined") (setPending(null), setError({ code: "MINED_LATE", message: `${pending.hash} was mined in block ${p.block} after the demo stopped waiting` }));
+        else setPending((cur) => (cur?.hash !== pending.hash ? cur : { ...cur, state: p.state as Pending["state"], admittedAt: p.admittedAt ? Math.floor(p.admittedAt / 1000) : cur.admittedAt }));
+      } catch {} // keep the last known state
+    };
+    check();
+    const t = setInterval(check, 10_000);
+    return () => void ((stop = true), clearInterval(t));
+  }, [pending?.hash, pending?.state]);
+
   // Live: quote the chosen preset and prefill maxTokenCost.
   useEffect(() => {
     if (mode !== "live") return;
@@ -103,6 +121,7 @@ export function Console({ replay }: { replay: Run[] }) {
       return;
     }
     setLiveRun(null);
+    setPending(null);
     dispatch({ type: "sending" });
     try {
       const res = await fetch("/api/send", {
@@ -114,6 +133,9 @@ export function Console({ replay }: { replay: Run[] }) {
       if (!res.ok) {
         dispatch({ type: "failed" });
         setError(body.error);
+        if (body.error?.code === "NOT_MINED" && body.error.hash) {
+          setPending({ hash: body.error.hash, state: "stuck-at-gateway", admittedAt: Math.floor(Date.now() / 1000) - 90 });
+        }
         return;
       }
       setLiveRun(body as Run);
@@ -126,7 +148,7 @@ export function Console({ replay }: { replay: Run[] }) {
 
   return (
     <main className="mx-auto max-w-[1440px] px-4 sm:px-6 py-4">
-      <Header status={status} mode={mode} onMode={(m) => (setMode(m), m === "live" && setLiveRun(null), m === "live" && dispatch({ type: "load", outcomes: [] }))} />
+      <Header status={status} mode={mode} pending={pending} onMode={(m) => (setMode(m), m === "live" && setLiveRun(null), m === "live" && dispatch({ type: "load", outcomes: [] }))} />
       <div className="grid gap-3 mt-3 lg:grid-cols-[minmax(240px,270px)_minmax(0,1fr)_minmax(290px,330px)] items-start">
         <Wallet
           mode={mode}

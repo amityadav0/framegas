@@ -15,6 +15,37 @@ export interface Status {
 
 const STALE_AFTER = 120;
 
+/** A live transaction the gateway admitted that has not been mined yet. */
+export interface Pending {
+  hash: string;
+  state: "stuck-at-gateway" | "relayed" | "dropped";
+  /** Unix seconds. */
+  admittedAt: number;
+}
+
+const PENDING_TEXT: Record<Pending["state"], string> = {
+  "stuck-at-gateway": "Stuck at gateway · admitted, not seen by miner",
+  relayed: "Relayed to miner · waiting for a block",
+  dropped: "Dropped by gateway · never reached the miner",
+};
+
+/** Explains the devnet instead of spinning: where an admitted transaction is, and for how long. */
+function PendingPill({ pending, now }: { pending: Pending; now: number }) {
+  const bad = pending.state !== "relayed";
+  return (
+    <a
+      href={`https://explorer.altmempool.wtf/tx/${pending.hash}`}
+      target="_blank"
+      rel="noreferrer"
+      title={`${pending.hash}: the alt-mempool gateway admitted it; only the miner builds blocks`}
+      className={`inline-flex items-center gap-1.5 h-7 px-2 rounded-[4px] border text-[11.5px] num ${bad ? "border-bad/40 bg-bad-soft !text-bad" : "border-line-strong bg-sunk !text-muted"}`}
+    >
+      <span className={`size-1.5 rounded-full ${bad ? "bg-bad" : "bg-muted"}`} />
+      {PENDING_TEXT[pending.state]} · {age(Math.max(0, now - pending.admittedAt))}
+    </a>
+  );
+}
+
 function StatusPill({ status, now }: { status: Status | null; now: number }) {
   if (!status) return <span className="num text-[11.5px] text-faint">Gateway …</span>;
   const stale = !status.reachable || status.blockTimestamp === undefined || now - status.blockTimestamp > STALE_AFTER;
@@ -71,7 +102,7 @@ function ThemeToggle() {
   );
 }
 
-export function Header({ status, mode, onMode }: { status: Status | null; mode: "replay" | "live"; onMode: (m: "replay" | "live") => void }) {
+export function Header({ status, mode, onMode, pending }: { status: Status | null; mode: "replay" | "live"; onMode: (m: "replay" | "live") => void; pending?: Pending | null }) {
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   useEffect(() => {
     const t = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000);
@@ -87,6 +118,7 @@ export function Header({ status, mode, onMode }: { status: Status | null; mode: 
         <div className="text-[11px] text-muted mt-0.5">Built for Hegotá · EF alt-mempool devnet (chain 1337)</div>
       </div>
       <div className="flex flex-wrap items-center gap-2">
+        {pending && mode === "live" && <PendingPill pending={pending} now={now} />}
         <StatusPill status={status} now={now} />
         <Segmented
           value={mode}

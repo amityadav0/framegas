@@ -4,7 +4,7 @@ import type { Address } from "viem";
 import { presetCalls, type PresetContext, type PresetId } from "./presets";
 import { frameKinds, frameName, frameRole, units, type Run } from "./run";
 
-export type LiveError = { code: string; message: string; requiredTokens?: string };
+export type LiveError = { code: string; message: string; requiredTokens?: string; hash?: string; explorerUrl?: string };
 export type Outcome<T> = { ok: true; value: T } | { ok: false; status: number; error: LiveError };
 
 export async function readBalances(chain: Chain, token: Address, who: Address): Promise<{ token: bigint; eth: bigint }> {
@@ -26,8 +26,18 @@ async function admissionChecks(chain: Chain, hash: string): Promise<{ passed: nu
 function fail(e: unknown): { ok: false; status: number; error: LiveError } {
   if (e instanceof FrameGasError) {
     const status = e.code === "NOT_MINED" ? 504 : e.code === "REJECTED" ? 502 : 422;
-    const required = (e.details as { requiredTokens?: bigint } | undefined)?.requiredTokens;
-    return { ok: false, status, error: { code: e.code, message: e.message, ...(required !== undefined ? { requiredTokens: required.toString() } : {}) } };
+    const details = e.details as { requiredTokens?: bigint; hash?: string; explorerUrl?: string } | undefined;
+    const required = details?.requiredTokens;
+    return {
+      ok: false,
+      status,
+      error: {
+        code: e.code,
+        message: e.message,
+        ...(required !== undefined ? { requiredTokens: required.toString() } : {}),
+        ...(details?.hash ? { hash: details.hash, explorerUrl: details.explorerUrl } : {}),
+      },
+    };
   }
   return { ok: false, status: 500, error: { code: "UNEXPECTED", message: e instanceof Error ? e.message : String(e) } };
 }
@@ -109,4 +119,14 @@ export async function sendLive(framegas: FrameGas, chain: Chain, ctx: PresetCont
 /** Live mode needs a chain that is producing blocks. */
 export function chainIsLive(latestBlockTimestamp: number, nowSeconds: number, maxAgeSeconds = 120): boolean {
   return nowSeconds - latestBlockTimestamp <= maxAgeSeconds;
+}
+
+/** Where an admitted transaction is, from what the gateway and the miner each report. */
+export type PendingState = { state: "mined"; block: number } | { state: "stuck-at-gateway"; admittedAt?: number } | { state: "relayed"; admittedAt?: number } | { state: "dropped"; admittedAt?: number };
+
+export function pendingState(input: { receiptBlock?: number; gatewayHasEntry: boolean; admittedAt?: number; minerSeen: boolean }): PendingState {
+  if (input.receiptBlock !== undefined) return { state: "mined", block: input.receiptBlock };
+  if (input.minerSeen) return { state: "relayed", admittedAt: input.admittedAt };
+  if (input.gatewayHasEntry) return { state: "stuck-at-gateway", admittedAt: input.admittedAt };
+  return { state: "dropped", admittedAt: input.admittedAt };
 }

@@ -94,3 +94,13 @@ describe("chainIsLive", () => {
     expect(chainIsLive(1793919526, 1793919526 + 4 * 3600)).toBe(false);
   });
 });
+
+describe("pendingState", () => {
+  it("names where an admitted transaction is", async () => {
+    const { pendingState } = await import("../lib/live");
+    expect(pendingState({ receiptBlock: 1221, gatewayHasEntry: false, minerSeen: true })).toEqual({ state: "mined", block: 1221 });
+    expect(pendingState({ gatewayHasEntry: true, minerSeen: false, admittedAt: 5 })).toEqual({ state: "stuck-at-gateway", admittedAt: 5 });
+    expect(pendingState({ gatewayHasEntry: true, minerSeen: true })).toMatchObject({ state: "relayed" });
+    expect(pendingState({ gatewayHasEntry: false, minerSeen: false })).toMatchObject({ state: "dropped" });
+  });
+});
