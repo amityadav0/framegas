@@ -1,31 +1,30 @@
 {
   "chainId": 1337,
-  "fgUSD": "0x601e8c20e53154778316bf7262b58475d8946680",
-  "paymaster": "0x2fc9a3f25c65d38f83bdb128c23728cc5ef75af8",
+  "fgUSD": "0x1f9abb072fe931007f58cd7fc56459615e35b908",
+  "paymaster": "0xf1c8e7df904c5141fc4b5e4e5c2ec2d53784946f",
   "pool": {
-    "id": "0x54078dc76392ab22ff5aa126186285a6c9809ac03f23da66e8452106533f9138",
+    "id": "0xdc866b8eab6d03669c0d5e2fcc61e8f75d60ab6f866d7455c2de8307ea6b9dfe",
     "currency0": "0x0000000000000000000000000000000000000000",
-    "currency1": "0x601e8c20e53154778316bf7262b58475d8946680",
+    "currency1": "0x1f9abb072fe931007f58cd7fc56459615e35b908",
     "fee": 3000,
     "tickSpacing": 60,
     "hooks": "0x0000000000000000000000000000000000000000"
   },
   "paymasters": {
-    "0x601e8C20e53154778316bF7262B58475D8946680": "0x2fc9a3f25c65d38f83bdb128c23728cc5ef75af8"
+    "0x1f9abb072fe931007f58cd7fc56459615e35b908": "0xf1c8e7df904c5141fc4b5e4e5c2ec2d53784946f"
   },
   "demo": {
-    "swapRouter": "0x3c09c2f45170911f64fb30876e598b2d788fe913",
-    "lendingPool": "0x28e470e37c98f108a91197d7994ec8bfeab6efcd"
+    "swapRouter": "0xe6cc3911f8cc6508844e64d7999dfa355d09d50b",
+    "lendingPool": "0x6b10383d8a5c90a3776972c717783bd7d573b331"
   },
   "tokens": {
     "fgUSD": {
-      "address": "0x601e8c20e53154778316bf7262b58475d8946680",
+      "address": "0x1f9abb072fe931007f58cd7fc56459615e35b908",
       "decimals": 6,
-      "paymaster": "0x2fc9a3f25c65d38f83bdb128c23728cc5ef75af8",
-      "poolId": "0x54078dc76392ab22ff5aa126186285a6c9809ac03f23da66e8452106533f9138",
+      "paymaster": "0xf1c8e7df904c5141fc4b5e4e5c2ec2d53784946f",
+      "poolId": "0xdc866b8eab6d03669c0d5e2fcc61e8f75d60ab6f866d7455c2de8307ea6b9dfe",
       "minLiquidity": "1000000000000",
       "minLiquidityNote": "Demo threshold. Production needs about 7e14, roughly 4 ETH of depth, where griefing is unprofitable"
     }
-  },
-  "paymasterPreQuota": "0x7503ed4e90b0cab850412fd8bf318b8e269f9996"
+  }
 }
