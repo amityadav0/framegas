@@ -202,6 +202,8 @@ Full table, rule references and repro scripts: [`docs/findings.md`](./docs/findi
 | 25 | Block production halted at block 408262 on 2026-11-06; the chain was later reset |
 | 26 | Explorer history was lost when the gateway restarted |
 | 27 | After the reset, the same paymaster code uses about 3,150 more validation gas (48,594 vs 45,429 normal) |
+| 28 | Admitted transactions the gateway never relays to the miner: four in a row stayed `New` while the miner "has not seen" them |
+| 29 | A mined transaction is first reported "Dropped, Cancelled" with a nonce-mismatch reason, 0.75 s before inclusion |
 | — | [Griefing economics](./docs/findings.md#griefing-economics): at 5e13 liquidity, moving the price 480 ticks costs 0.35 fgUSD in fees against a 1.11 fgUSD loss; unprofitable from about 7e14 (≈4 ETH depth) |
 | — | [First-ever tick crossing](./docs/findings.md#gas-by-ticks-crossed): needs 195,840 state gas; at the 0 floor, settlement failed and the paymaster lost 0.000466 ETH |
 | — | [Worst-case loss](./docs/findings.md#worst-case-loss-per-transaction): bounded by `MAX_TX_COST_WEI`, 0.002 ETH on the devnet; fuzzed over 10,000 runs |
