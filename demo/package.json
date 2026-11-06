@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "pnpm --filter @framegas/sdk build && next dev --webpack",
-    "build": "pnpm --filter @framegas/sdk build && next build --webpack",
+    "build": "[ -f ../sdk/dist/index.js ] || pnpm --filter @framegas/sdk build; next build --webpack",
     "start": "next start",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
