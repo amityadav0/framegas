@@ -48,6 +48,7 @@ Explorer history is held in memory and is cleared when the node restarts, so thi
 | 22 | Frame failure and later frames | Later frames still run (EIP-8141) | Later frames still run | Confirmed: in simulation a failed settle frame was followed by a successful user call. Validation has to rule out any settlement failure the user controls | Live | `ethrex_simulateFrameTransaction` |
 | 23 | Admitting a transaction whose settlement will fail | Rules cover the validation prefix only | Rules cover the validation prefix only | Admitted. The admission record even lists the frame statuses it simulated, such as `success, success, reverted, success`. The mempool is no backstop for failures after the prefix | Live | `scripts/07-thin-pool.ts` |
 | 24 | Inclusion of admitted transactions | Not specified | Not specified | Some admitted transactions wait minutes, and some never leave `New`. Two of ours have been pending for over 10 hours, alongside 12 from other teams, while later ones mined. Another of ours took about 10 minutes. The SDK waits up to 10 minutes and then reports the hash as admitted but not mined | Live | `0x4045eaef…abe2`, `0x66be840e…d750`, `0xd9bcfa17…9b46` |
+| 25 | Block production | Not specified | Not specified | **Halted.** The last block is 408262, timestamped 2026-11-06 04:28:46 IST (Unix 1793919526). It had not advanced by 08:55 IST, more than four hours later. Earlier, between 2026-11-05 19:01 and 23:43 IST, blocks came every few seconds | Live | `eth_getBlockByNumber("latest")` |
 
 ## Devnet state versus its documentation
 

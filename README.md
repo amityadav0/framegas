@@ -9,14 +9,14 @@ FrameGas is a paymaster built on [EIP-8141](https://eips.ethereum.org/EIPS/eip-8
 ## What it does
 
 ```ts
-await framegas.send({
-  payToken: UNI,
-  maxTokenCost: parseUnits("0.3", 18),
-  calls: [{ to: AavePool, data: supply(UNI, amount, me) }],
-});
+const framegas = createFrameGas({ privateKey, paymasters: { [fgUSD]: paymaster } });
+const { requiredTokens } = await framegas.quote({ payToken: fgUSD, calls });
+await framegas.send({ payToken: fgUSD, maxTokenCost: requiredTokens, calls });
 ```
 
-One signature. The user holds zero ETH. If gas would exceed `maxTokenCost`, validation fails and nothing moves.
+One signature, one transaction. The user holds zero ETH, including on their first transaction. If gas would cost more than `maxTokenCost`, validation fails and nothing moves.
+
+On the devnet a typical transaction cost 1.38 fgUSD, about 1.04x its gas fee at the pool's price, and the user had to hold 1.63 fgUSD. A user's first transaction cost about 0.56 fgUSD more.
 
 ## Design trade-offs
 
@@ -35,32 +35,67 @@ One signature. The user holds zero ETH. If gas would exceed `maxTokenCost`, vali
 
 | Path | What |
 | --- | --- |
-| `contracts/` | Foundry: `FrameGasPaymaster`, `FrameGasValidator` (ERC-8286 / ERC-7579 module), `QuotaPolicy`, optional `FrameGasHook` (Uniswap v4) |
-| `sdk/` | `@framegas/sdk` — viem client, frame-tx encoder, alt-mempool gateway RPC |
-| `mcp/` | `@framegas/mcp` — `framegas_quote`, `framegas_send`, `framegas_budget` tools |
-| `skill/` | Agent Skill (Uniswap-AI format) |
-| `cre/` | Chainlink CRE workflow: price sanity bound + divergence alert (simulation) |
-| `demo/` | Next.js demo |
-| `docs/` | Architecture, threat model, findings on alt-mempool rules, CROPS |
+| `contracts/` | Foundry: `FrameGasPaymaster`, `FgUSD` (6 decimals, EIP-2612), unit tests and a whole-transaction fuzz suite |
+| `sdk/` | `@framegas/sdk`: simulates to find frame limits, then quotes, builds, signs and broadcasts |
+| `mcp/` | `@framegas/mcp`: `framegas_quote`, `framegas_send` and `framegas_budget` tools over the SDK |
+| `demo/` | Demo page, with a replay mode that runs from `docs/evidence/` when the devnet is down |
+| `scripts/` | `redeploy.sh` rebuilds the whole deployment, and the numbered scripts reproduce each finding |
+| `docs/` | [`findings.md`](./docs/findings.md) on the alt-mempool rules, and [`evidence/`](./docs/evidence/) |
 
 ## Uniswap integration (for reviewers)
 
-<!-- fill with exact file:line pointers before submission -->
-- Pool price read in validation: `contracts/src/FrameGasPaymaster.sol` — `_quote()`
-- Swap in execution: `contracts/src/FrameGasPaymaster.sol` — `_settle()`
-- Hook: `contracts/src/FrameGasHook.sol`
+| What | Where |
+| --- | --- |
+| Pool price read during validation (`StateLibrary.getSlot0` on the v4 PoolManager) | [`FrameGasPaymaster.sol:254`](./contracts/src/FrameGasPaymaster.sol#L254) |
+| Price to token cost, from `sqrtPriceX96` | [`FrameGasPaymaster.sol:512-516`](./contracts/src/FrameGasPaymaster.sol#L512-L516) |
+| Manipulation check against the reference tick | [`FrameGasPaymaster.sol:255-256`](./contracts/src/FrameGasPaymaster.sol#L255-L256) |
+| Minimum active liquidity (`getLiquidity`) | [`FrameGasPaymaster.sol:257-258`](./contracts/src/FrameGasPaymaster.sol#L257-L258) |
+| Settlement: `PoolManager.unlock` | [`FrameGasPaymaster.sol:293`](./contracts/src/FrameGasPaymaster.sol#L293) |
+| Exact-output swap, tokens for the ETH `APPROVE` collected | [`FrameGasPaymaster.sol:418-439`](./contracts/src/FrameGasPaymaster.sol#L418-L439) |
+| Paying the pool and taking ETH (`sync`, `transferFrom`, `settle`, `take`) | [`FrameGasPaymaster.sol:431-436`](./contracts/src/FrameGasPaymaster.sol#L431-L436) |
+| Refund: exact-input swap of surplus ETH back to tokens | [`FrameGasPaymaster.sol:441-458`](./contracts/src/FrameGasPaymaster.sol#L441-L458) |
+| Unlock callback | [`FrameGasPaymaster.sol:339-346`](./contracts/src/FrameGasPaymaster.sol#L339-L346) |
+| Reference tick, moved at most `maxDeviation` per block | [`FrameGasPaymaster.sol:352-355`](./contracts/src/FrameGasPaymaster.sol#L352-L355), [`FrameGasPaymaster.sol:481-492`](./contracts/src/FrameGasPaymaster.sol#L481-L492) |
 
-See [`FEEDBACK.md`](./FEEDBACK.md) for Uniswap developer feedback.
+The pool is native ETH against the token, as mainnet's deepest v4 pools are, so there is no WETH wrapping. See [`FEEDBACK.md`](./FEEDBACK.md) for Uniswap developer feedback.
 
 ## Alt-mempool integration (for reviewers)
 
-<!-- admitted tx link + findings -->
-- Admitted frame tx: _explorer link_
-- Rule findings vs ERC-8421: [`docs/findings.md`](./docs/findings.md)
+| What | Where |
+| --- | --- |
+| Validation entry point | [`FrameGasPaymaster.sol:242-278`](./contracts/src/FrameGasPaymaster.sol#L242-L278) |
+| The settle frame must follow validation, run unbatched, carry no ETH, have exact calldata and enough gas | [`FrameGasPaymaster.sol:365-382`](./contracts/src/FrameGasPaymaster.sol#L365-L382) |
+| Bootstrap check: the frame before settlement may only be `approve(paymaster, n)`, with `n` at least the cap | [`FrameGasPaymaster.sol:385-400`](./contracts/src/FrameGasPaymaster.sol#L385-L400) |
+| Per-transaction cost limit | [`FrameGasPaymaster.sol:250-251`](./contracts/src/FrameGasPaymaster.sol#L250-L251) |
+| Permit check, the path that needs `ecrecover` | [`FrameGasPaymaster.sol:403-415`](./contracts/src/FrameGasPaymaster.sol#L403-L415) |
+| Staking from the constructor, as the contract itself | [`FrameGasPaymaster.sol:232`](./contracts/src/FrameGasPaymaster.sol#L232) |
+| Refund, reading earlier frames' gas from `FRAMEPARAM` | [`FrameGasPaymaster.sol:301-336`](./contracts/src/FrameGasPaymaster.sol#L301-L336), [`FrameGasPaymaster.sol:461-478`](./contracts/src/FrameGasPaymaster.sol#L461-L478) |
+
+- The same signed transaction, refused by the canonical mempool and admitted by the alt-mempool: [`docs/evidence/`](./docs/evidence/README.md#the-same-signed-transaction-in-both-mempools)
+- Rule findings against the pinned draft and ERC-8421, griefing economics and worst-case loss: [`docs/findings.md`](./docs/findings.md)
+
+## Limitations
+
+- **Devnet only, until Hegotá.** EIP-8141 is not live on mainnet, so FrameGas cannot run there. The contracts target mainnet's native-ETH pools and real token behaviour so that only addresses change.
+- **The devnet's liquidity threshold is a demo value.** It accepts pools far thinner than production should: griefing stops being profitable at about 4 ETH of depth.
+- **Permits cannot run on the devnet.** Its sidecar rejects precompile calls in validation. Bootstrap mode covers the same case with an approve frame.
+- **Gas permits must not expire**, because validation cannot read the time.
+- **Tokens without EIP-2612 use bootstrap mode.** Permit2 is not supported yet.
+- **A first-ever tick crossing needs more state gas** than the floors validation enforces. The SDK finds it by simulating, but a client that declares only the floors will fail settlement, and the paymaster pays that transaction's gas.
+- **Stake cannot be withdrawn**, because the paymaster has no owner.
+- **The devnet is not dependable.** It stopped producing blocks on 2026-11-06, and some admitted transactions are never included. The demo can replay recorded evidence instead.
 
 ## Run it
 
-_TBD_
+```sh
+pnpm install
+forge test --root contracts          # 73 tests, including the fuzz suite
+pnpm --filter @framegas/sdk test     # SDK unit tests against a fake chain
+scripts/redeploy.sh --fresh          # new token, pool, staked paymaster and smoke test on the devnet
+pnpm exec tsx scripts/08-sdk-live.ts # the SDK end to end on the devnet
+```
+
+Deployment needs about 0.085 ETH of devnet ETH, which it cannot recover. The deployer key is generated into the git-ignored `.env` on first use.
 
 ## AI usage disclosure
 
