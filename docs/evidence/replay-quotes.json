@@ -1,0 +1,36 @@
+{
+  "0x2b733af2c4c763c06d0be508fe90adaf36503255876345c2469fb843baf8a331": {
+    "sender": "0xefb9493185a9ea56c66afccd67a770d8de563d9e",
+    "token": "0x601e8c20e53154778316bf7262b58475d8946680",
+    "senderTokenBalance": {
+      "before": "100000000",
+      "after": "97051796"
+    },
+    "senderEthBalanceNow": "0",
+    "maxCostWei": "912812000000000",
+    "priceFromSwap": {
+      "tx": "0x1c9ca78b3072dd3d14cc053f7a577817bd1802d323221d8d45d56a376f4ea9a4",
+      "block": 405133,
+      "sqrtPriceX96": "3925786165882553062608181",
+      "tick": -198261
+    },
+    "quoteTokens": "2353233"
+  },
+  "0x6e76710d96c151e022a1807ab3ff6db9700f8fae517b2c7d03e95a2314654ff7": {
+    "sender": "0xefb9493185a9ea56c66afccd67a770d8de563d9e",
+    "token": "0x601e8c20e53154778316bf7262b58475d8946680",
+    "senderTokenBalance": {
+      "before": "97051796",
+      "after": "94661348"
+    },
+    "senderEthBalanceNow": "0",
+    "maxCostWei": "633830000000000",
+    "priceFromSwap": {
+      "tx": "0x2b733af2c4c763c06d0be508fe90adaf36503255876345c2469fb843baf8a331",
+      "block": 405263,
+      "sqrtPriceX96": "3928484460913170818519996",
+      "tick": -198247
+    },
+    "quoteTokens": "1636264"
+  }
+}
