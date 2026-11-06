@@ -10,6 +10,8 @@
 
 **Demo:** <https://framegas-demo.netlify.app> (Replay mode) · **Clips:** [`docs/evidence/video/`](./docs/evidence/video/README.md) · **Findings:** 29 on the devnet versus the rule texts, grouped at the top of [`docs/findings.md`](./docs/findings.md): rule caps (flat 100,000 validation gas), banned opcodes (`GAS`, `TIMESTAMP`), missing precompiles (no `ecrecover` in validation), gateway relay and liveness (halt, transactions relayed an hour late or dropped, dropped-then-mined), explorer memory.
 
+**Brand:** [`docs/brand/`](./docs/brand/)
+
 ## Quickstart
 
 ```sh

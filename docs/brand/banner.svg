@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#FAFAF8"/>
+  <line x1="80" y1="96" x2="1200" y2="96" stroke="#D9D9D4" stroke-width="2"/>
+  <text x="80" y="76" font-family="Inter, Helvetica, Arial, sans-serif" font-size="22" letter-spacing="4" fill="#5B5B57">FRAMEGAS</text>
+  <text x="1200" y="76" text-anchor="end" font-family="Menlo, Consolas, monospace" font-size="20" fill="#5B5B57">EIP-8141 · ERC-8421 · UNISWAP v4</text>
+  <text x="80" y="300" font-family="Inter, Helvetica, Arial, sans-serif" font-size="78" font-weight="600" fill="#111214">The permissionless</text>
+  <text x="80" y="390" font-family="Inter, Helvetica, Arial, sans-serif" font-size="78" font-weight="600" fill="#111214">gas payment layer</text>
+  <text x="80" y="480" font-family="Inter, Helvetica, Arial, sans-serif" font-size="78" font-weight="600" fill="#111214">for Ethereum.</text>
+  <text x="80" y="560" font-family="Inter, Helvetica, Arial, sans-serif" font-size="28" fill="#5B5B57">Pay gas in any ERC20, natively. No relayer, no treasury, no off-chain signer.</text>
+  <!-- frame glyph -->
+  <rect x="1010" y="200" width="190" height="34" rx="6" fill="none" stroke="#111214" stroke-width="8"/>
+  <rect x="1010" y="260" width="190" height="34" rx="6" fill="#1F7A4D"/>
+  <rect x="1010" y="320" width="190" height="34" rx="6" fill="none" stroke="#111214" stroke-width="8"/>
+  <line x1="80" y1="640" x2="1200" y2="640" stroke="#D9D9D4" stroke-width="2"/>
+  <text x="80" y="680" font-family="Menlo, Consolas, monospace" font-size="20" fill="#5B5B57">canonical mempool: StorageReadNonSender</text>
+  <text x="1200" y="680" text-anchor="end" font-family="Menlo, Consolas, monospace" font-size="20" fill="#1F7A4D">alt mempool: admitted 24/24</text>
+</svg>

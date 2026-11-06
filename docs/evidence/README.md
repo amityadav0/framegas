@@ -45,8 +45,8 @@ The demo console at 3200×1800, in Replay mode on these two transactions:
 | --- | --- |
 | [`demo/console-signed-light.jpg`](./demo/console-signed-light.jpg) | Tx 2 (normal, `0x08c4…b6b7`) signed, not sent: frames pending, both mempool cards "Not sent", light theme |
 | [`demo/console-bootstrap-light.jpg`](./demo/console-bootstrap-light.jpg) | Tx 1 (bootstrap, `0x45fc…1dd3`) mined: 10/10, every frame succeeded, canonical rejection and 24/24 admission, light theme |
-| [`demo/console-normal-light.jpg`](./demo/console-normal-light.jpg) | Tx 2 (normal, `0x08c4…b6b7`), light theme |
-| [`demo/console-normal-dark.jpg`](./demo/console-normal-dark.jpg) | Tx 2, dark theme |
+| [`demo/console-normal-light.jpg`](./demo/console-normal-light.jpg) | Tx 2 (normal, `0x08c4…b6b7`) mined: 9/9, every frame succeeded, canonical rejected with `StorageReadNonSender`, 24/24 admitted, paid 1.385 of a 1.687 cap, light theme |
+| [`demo/console-normal-dark.jpg`](./demo/console-normal-dark.jpg) | Tx 2 (normal, `0x08c4…b6b7`) mined: 9/9, every frame succeeded, canonical rejected with `StorageReadNonSender`, 24/24 admitted, paid 1.385 of a 1.687 cap, dark theme |
 
 ### Quota
 

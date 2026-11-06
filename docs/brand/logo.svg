@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#111214"/>
+  <!-- three frames: verify / paymaster / exec -->
+  <rect x="116" y="128" width="280" height="56" rx="10" fill="none" stroke="#FAFAF8" stroke-width="14"/>
+  <rect x="116" y="228" width="280" height="56" rx="10" fill="#1F7A4D" stroke="#1F7A4D" stroke-width="14"/>
+  <rect x="116" y="328" width="280" height="56" rx="10" fill="none" stroke="#FAFAF8" stroke-width="14"/>
+  <!-- gas mark -->
+  <circle cx="396" cy="256" r="34" fill="#111214" stroke="#FAFAF8" stroke-width="14"/>
+  <circle cx="396" cy="256" r="10" fill="#FAFAF8"/>
+</svg>
