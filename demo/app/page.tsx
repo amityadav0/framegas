@@ -1,8 +1,8 @@
-import { Demo } from "./Demo";
-import { loadAdmissionReports, loadComparisonRuns } from "../lib/evidence";
+import { loadReplayRuns } from "../lib/evidence";
+import { Console } from "./Console";
 
 export const dynamic = "force-dynamic";
 
 export default function Page() {
-  return <Demo recorded={loadComparisonRuns()} reports={loadAdmissionReports()} />;
+  return <Console replay={loadReplayRuns()} />;
 }

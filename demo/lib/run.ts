@@ -35,8 +35,8 @@ export interface Run {
   signed?: { prefix: string; bytes: number };
   balances: { tokenBefore: string | null; tokenAfter: string | null; eth: string };
   cost: { quote: string | null; cap: string; paid: string; refunded: string; net: string };
-  /** The paymaster's ETH through the transaction: reserved, bought, sold back, fee, net. */
-  paymaster: { maxCost: string; bought: string; sold: string; fee: string; delta: string };
+  /** The paymaster's ETH through the transaction: reserved, bought, sold back, unused reserve returned, net. */
+  paymaster: { maxCost: string; bought: string; sold: string; fee: string; returned: string; delta: string };
   canonical: MempoolResult | null;
   alt: MempoolResult & { checksPassed?: number; checksTotal?: number; checksNote?: string };
   frames: FrameRow[];

@@ -105,7 +105,7 @@ export function loadReplayRuns(dir = evidenceDir()): Run[] {
           eth: q ? eth(BigInt(q.senderEthBalanceNow)) : "0",
         },
         cost: { quote: q ? tok(BigInt(q.quoteTokens)) : null, cap: tok(cap), paid: tok(s.paid), refunded: tok(s.refunded), net: tok(s.paid - s.refunded) },
-        paymaster: { maxCost: eth(s.ethBought), bought: eth(s.ethBought), sold: eth(s.ethSold), fee: eth(fee), delta: eth(s.ethBought - s.ethSold - fee) },
+        paymaster: { maxCost: eth(s.ethBought), bought: eth(s.ethBought), sold: eth(s.ethSold), fee: eth(fee), returned: eth(s.ethBought - fee), delta: eth(s.ethBought - s.ethSold - fee) },
         canonical: { method: canonical.method, admitted: canonical.response.admitted, message: canonical.response.admitted ? "admitted" : canonical.response.error },
         alt: {
           method: alt.method,
