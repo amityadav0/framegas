@@ -1,4 +1,4 @@
-# Uniswap Developer Feedback — FrameGas
+# Uniswap Developer Feedback: FrameGas
 
 _Required for the Uniswap Foundation prize. Submitted through https://developers.uniswap.org/hackathon-feedback with a link to this file._
 

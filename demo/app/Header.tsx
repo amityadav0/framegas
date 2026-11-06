@@ -102,6 +102,20 @@ function ThemeToggle() {
   );
 }
 
+/** The brand mark from docs/brand/logo.svg: three frames, the paymaster's in green. */
+function Logo() {
+  return (
+    <svg viewBox="0 0 512 512" width="20" height="20" aria-hidden="true" className="shrink-0">
+      <rect width="512" height="512" rx="96" fill="#111214" />
+      <rect x="116" y="128" width="280" height="56" rx="10" fill="none" stroke="#FAFAF8" strokeWidth="14" />
+      <rect x="116" y="228" width="280" height="56" rx="10" fill="#1F7A4D" stroke="#1F7A4D" strokeWidth="14" />
+      <rect x="116" y="328" width="280" height="56" rx="10" fill="none" stroke="#FAFAF8" strokeWidth="14" />
+      <circle cx="396" cy="256" r="34" fill="#111214" stroke="#FAFAF8" strokeWidth="14" />
+      <circle cx="396" cy="256" r="10" fill="#FAFAF8" />
+    </svg>
+  );
+}
+
 export function Header({ status, mode, onMode, pending }: { status: Status | null; mode: "replay" | "live"; onMode: (m: "replay" | "live") => void; pending?: Pending | null }) {
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   useEffect(() => {
@@ -111,11 +125,12 @@ export function Header({ status, mode, onMode, pending }: { status: Status | nul
   return (
     <header className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b border-line pb-3">
       <div className="min-w-0">
-        <div className="text-[13px]">
+        <div className="flex items-center gap-2 text-[13px]">
+          <Logo />
           <span className="font-semibold tracking-[-0.01em]">FrameGas</span>
-          <span className="text-muted"> — The permissionless gas-payment layer for Ethereum</span>
+          <span className="text-muted">The permissionless gas-payment layer for Ethereum</span>
         </div>
-        <div className="text-[11px] text-muted mt-0.5">Built for Hegotá · EF alt-mempool devnet (chain 1337)</div>
+        <div className="text-[11px] text-muted mt-0.5 pl-7">Built for Hegotá · EF alt-mempool devnet (chain 1337)</div>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {pending && mode === "live" && <PendingPill pending={pending} now={now} />}

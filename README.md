@@ -118,7 +118,7 @@ All in [`contracts/src/FrameGasPaymaster.sol`](./contracts/src/FrameGasPaymaster
 
 Measured on the current deployment on 2026-11-06 at 2 gwei by `scripts/08-sdk-live.ts`: one user's first and second transaction, each with two `transfer` calls (the second to an address that held none, so it writes a new balance slot in the first transaction). Limit is what the signed transaction declared.
 
-**Bootstrap** — [`0x45fc…1dd3`](https://explorer.altmempool.wtf/tx/0x45fcd889938d04890cedf379a8bd83e3e34b818a71ac7975b65c742eaa4e1dd3), block 1213
+**Bootstrap:** [`0x45fc…1dd3`](https://explorer.altmempool.wtf/tx/0x45fcd889938d04890cedf379a8bd83e3e34b818a71ac7975b65c742eaa4e1dd3), block 1213
 
 | # | Frame | Mode | Gas used / limit | State gas used / limit |
 | --- | --- | --- | --- | --- |
@@ -131,7 +131,7 @@ Measured on the current deployment on 2026-11-06 at 2 gwei by `scripts/08-sdk-li
 | 6 | `refund` | SENDER | 83,524 / 96,000 | 0 |
 | | Total | | 507,574 | fee 0.001015 ETH, user paid 2.332470 fgUSD net, paymaster +0.000025 ETH |
 
-**Normal** — [`0x08c4…b6b7`](https://explorer.altmempool.wtf/tx/0x08c4836702188f61108cb21f7e0067ef07f2a47e7bc123ceda62cdcf1835b6b7), block 1221
+**Normal:** [`0x08c4…b6b7`](https://explorer.altmempool.wtf/tx/0x08c4836702188f61108cb21f7e0067ef07f2a47e7bc123ceda62cdcf1835b6b7), block 1221
 
 | # | Frame | Mode | Gas used / limit | State gas used / limit |
 | --- | --- | --- | --- | --- |
