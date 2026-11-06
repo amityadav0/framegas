@@ -1,4 +1,4 @@
-import { encodeErrorResult, encodeFunctionData, parseAbi, parseUnits, type Address, type Hex } from "viem";
+import { encodeErrorResult, encodeFunctionData, getAddress, parseAbi, parseUnits, type Address, type Hex } from "viem";
 import { describe, expect, it } from "vitest";
 import { paymasterAbi } from "../src/abi.js";
 import type { Chain, RawSimulation } from "../src/chain.js";
@@ -184,6 +184,13 @@ describe("quote", () => {
   it("reports the mode the transaction would use", async () => {
     expect((await world({ allowance: 0n }).client.quote({ payToken: TOKEN, calls: [CALL] })).mode).toBe("bootstrap");
     expect((await world({ allowance: parseUnits("100", 6) }).client.quote({ payToken: TOKEN, calls: [CALL] })).mode).toBe("normal");
+  });
+});
+
+describe("account", () => {
+  it("reports balance and allowance for the token's paymaster", async () => {
+    const a = await world({ balance: 7n, allowance: 3n }).client.account(TOKEN);
+    expect(a).toMatchObject({ balance: 7n, allowance: 3n, paymaster: getAddress(PAYMASTER) });
   });
 });
 

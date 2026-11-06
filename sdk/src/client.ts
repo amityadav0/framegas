@@ -117,8 +117,8 @@ export function createFrameGas(config: FrameGasConfig) {
   const chain =
     config.chain ??
     httpChain(config.gatewayUrl ?? "https://altmempoolgateway.forshtat.com/rpc", config.executionUrl ?? "https://altmempool.forshtat.com");
-  const account = privateKeyToAccount(config.privateKey);
-  const sender = config.sender ?? account.address;
+  const signer = privateKeyToAccount(config.privateKey);
+  const sender = config.sender ?? signer.address;
   const chainId = config.chainId ?? 1337;
   const explorerUrl = (config.explorerUrl ?? "https://explorer.altmempool.wtf").replace(/\/$/, "");
   const maxFeePerGas = config.maxFeePerGas ?? DEFAULT_MAX_FEE;
@@ -204,7 +204,7 @@ export function createFrameGas(config: FrameGasConfig) {
       sender,
       nonceSeq: nonce,
       frames,
-      signatures: [frameTx.secp256k1Placeholder(profile, config.sender ? account.address : "0x")],
+      signatures: [frameTx.secp256k1Placeholder(profile, config.sender ? signer.address : "0x")],
       fees: { maxFeePerGas, maxPriorityFeePerGas: config.maxPriorityFeePerGas },
     });
     return frameTx.signTx(profile, unsigned, config.privateKey) as Promise<ReturnType<typeof frameTx.newTx>>;
@@ -278,6 +278,16 @@ export function createFrameGas(config: FrameGasConfig) {
 
     const requiredTokens = await read<bigint>(paymaster.address, paymasterAbi, "quote", [outcome.simulated.maxCost]);
     return { mode, paymaster, limits: outcome.limits, simulated: outcome.simulated, simulations: outcome.simulations, warnings: outcome.warnings, requiredTokens, build: buildWith };
+  }
+
+  /** What the sender holds and has approved for a token's paymaster. */
+  async function account(payToken: Address): Promise<{ sender: Address; paymaster: Address; balance: bigint; allowance: bigint }> {
+    const paymaster = await paymasterFor(payToken);
+    const [balance, allowance] = await Promise.all([
+      read<bigint>(payToken, erc20Abi, "balanceOf", [sender]),
+      read<bigint>(payToken, erc20Abi, "allowance", [sender, paymaster.address]),
+    ]);
+    return { sender, paymaster: paymaster.address, balance, allowance };
   }
 
   /** Works out what a transaction would cost, by simulating it. Nothing is sent. */
@@ -378,7 +388,7 @@ export function createFrameGas(config: FrameGasConfig) {
     };
   }
 
-  return { quote, send, sender };
+  return { quote, send, account, sender };
 }
 
 export type FrameGas = ReturnType<typeof createFrameGas>;
