@@ -13,7 +13,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { decodeAbiParameters, encodeFunctionData, keccak256, parseAbi, toHex, type Hex } from "viem";
-import { PREDEPLOYS, rpc } from "./lib/devnet";
+import { PREDEPLOYS, rpc } from "./lib/devnet.js";
 
 const DIR = path.resolve(import.meta.dirname, "..", "docs", "evidence");
 const SWAP = keccak256(toHex("Swap(bytes32,address,int128,int128,uint160,uint128,int24,uint24)"));
