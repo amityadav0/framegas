@@ -1,0 +1,18 @@
+{
+  "first": {
+    "hash": "0x45fcd889938d04890cedf379a8bd83e3e34b818a71ac7975b65c742eaa4e1dd3",
+    "mode": "bootstrap",
+    "canonical": {
+      "admitted": false,
+      "message": "Invalid params: Frame transaction validation-prefix simulation failed: StorageReadNonSender"
+    }
+  },
+  "second": {
+    "hash": "0x08c4836702188f61108cb21f7e0067ef07f2a47e7bc123ceda62cdcf1835b6b7",
+    "mode": "normal",
+    "canonical": {
+      "admitted": false,
+      "message": "Invalid params: Frame transaction validation-prefix simulation failed: StorageReadNonSender"
+    }
+  }
+}
