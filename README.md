@@ -155,7 +155,8 @@ The devnet was reset on 2026-11-06, and its explorer keeps history in memory, so
 | Same bytes to both mempools, bootstrap | `0x2b73…a331`, block 405263 | `docs/evidence/mempool-comparison-bootstrap-0x2b73…{.json,-summary.jpg}` |
 | Same bytes to both mempools, normal | `0x6e76…4ff7`, block 405268 | `docs/evidence/mempool-comparison-normal-0x6e76…{.json,-summary.jpg}` |
 | Staked paymaster reading PoolManager storage, 24/24 checks | `0xcafc…06af`, block 402821 | [`docs/findings.md`](./docs/findings.md#a-staked-contract-paymaster-reading-poolmanager-storage) |
-| Current chain, redeploy smoke test (bootstrap, all frames succeeded, 3.08 fgUSD) | [`0x4c45…7e4d`](https://explorer.altmempool.wtf/tx/0x4c45be67d7ad7682c1cac67a0f6d615cfb6779137258f048c6171a9fdf687e4d) | — |
+| Current deployment, SDK end to end, bootstrap, canonical rejected, 24/24 | [`0x45fc…1dd3`](https://explorer.altmempool.wtf/tx/0x45fcd889938d04890cedf379a8bd83e3e34b818a71ac7975b65c742eaa4e1dd3), block 1213 | `docs/evidence/sdk-live-bootstrap-0x45fc…{.json,-summary.jpg,-frames.jpg}` |
+| Current deployment, SDK end to end, normal, canonical rejected, 24/24 | [`0x08c4…b6b7`](https://explorer.altmempool.wtf/tx/0x08c4836702188f61108cb21f7e0067ef07f2a47e7bc123ceda62cdcf1835b6b7), block 1221 | `docs/evidence/sdk-live-normal-0x08c4…{.json,-summary.jpg,-frames.jpg}` |
 | Quota: opt-in inside a bootstrap transaction | [`0xb3e5…b7f7`](https://explorer.altmempool.wtf/tx/0xb3e53ed4816645021f579fe68605982015573466b5a1bc5f43f612a9ca86b7f7), block 1026 | `docs/evidence/quota-live.json` |
 | Quota: bootstrap and normal transactions under a 10 fgUSD quota | [`0x83a3…1e46`](https://explorer.altmempool.wtf/tx/0x83a3f639c235f97b94bf729a01d868a0c97feb7cc50c1d7bb8674cb3847a1e46) (normal), block 1038 | `docs/evidence/quota-live.json` |
 | Demo replay screenshots, both modes, light and dark | | [`docs/evidence/demo/`](./docs/evidence/demo/) |
