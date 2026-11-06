@@ -97,6 +97,24 @@ pnpm exec tsx scripts/08-sdk-live.ts # the SDK end to end on the devnet
 
 Deployment needs about 0.085 ETH of devnet ETH, which it cannot recover. The deployer key is generated into the git-ignored `.env` on first use.
 
+**Demo page.** `pnpm --filter @framegas/demo dev`, then open <http://localhost:3000>. Replay mode needs nothing else: it plays the transactions recorded in `docs/evidence/`. Live mode turns on when the devnet is producing blocks and the server has `FRAMEGAS_DEMO_KEY`, a devnet key holding the token and no ETH.
+
+**MCP server.** Add it to an MCP client:
+
+```json
+{
+  "mcpServers": {
+    "framegas": {
+      "command": "pnpm",
+      "args": ["--dir", "/path/to/framegas/mcp", "start"],
+      "env": { "FRAMEGAS_PRIVATE_KEY": "0x… devnet key" }
+    }
+  }
+}
+```
+
+It offers `framegas_quote`, `framegas_send` and `framegas_budget`. Amounts are in token units, and a failure comes back as a readable error with the amount needed where that applies.
+
 ## AI usage disclosure
 
 Parts of this codebase were written with AI coding assistants (Claude). All architecture decisions, contract logic, security review and integration work were done by the team; AI output was reviewed and tested before inclusion.
