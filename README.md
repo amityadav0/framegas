@@ -28,7 +28,7 @@ const r = await framegas.send({ payToken: deployment.fgUSD, maxTokenCost: (requi
 // r.hash, r.explorerUrl, r.tokensPaid, r.tokensRefunded, r.frames
 ```
 
-Tests: `forge test --root contracts` (77, including a whole-transaction fuzz suite), `pnpm --filter @framegas/sdk test`, `pnpm --filter @framegas/demo test`.
+Tests: `forge test --root contracts` (97, including a whole-transaction fuzz suite and 20 quota tests), `pnpm --filter @framegas/sdk test`, `pnpm --filter @framegas/demo test`.
 
 ## How it works
 
@@ -44,7 +44,8 @@ Tests: `forge test --root contracts` (77, including a whole-transaction fuzz sui
  validate():  getSlot0 + getLiquidity on the v4 pool  │  settle():  PoolManager.unlock → exact-output swap
               tick within maxDeviation of refTick     │             token → ETH equal to APPROVE's max cost,
               quote(max cost) ≤ maxTokenCost          │             sync / transferFrom / settle / take
-              balance and allowance ≥ maxTokenCost    │  refund():  exact-input swap of the unused ETH
+              balance and allowance ≥ maxTokenCost    │
+              opt-in quota: spent + cap ≤ limit       │  refund():  exact-input swap of the unused ETH
               frames 2–3 bound exactly                │             back to the user's token
               APPROVE(PAYMENT): paymaster pays max    │  after last frame: chain returns unused max cost
 ```
@@ -58,21 +59,47 @@ Tests: `forge test --root contracts` (77, including a whole-transaction fuzz sui
 
 A permit in the settle frame is a third mode. The contract implements it, but the devnet rejects `ecrecover` in validation ([finding 18](./docs/findings.md#rule-drift)).
 
+## Two EF named examples in one paymaster
+
+The EF alt-mempool prize names "ERC-20 paymasters or daily quota paymasters" as examples of state access only an alt mempool admits. `FrameGasPaymaster` is both, in one contract and one stake.
+
+| | ERC-20 paymaster | Daily quota paymaster |
+| --- | --- | --- |
+| Storage validation reads that the canonical mempool forbids | PoolManager `slot0` and `liquidity` (another contract's storage) | `quotas[sender]` and `epoch` in the paymaster's own storage |
+| What validation rejects | quote above `maxTokenCost`, tick past `maxDeviation`, thin pool, low balance or allowance | `spent + maxTokenCost > limit` (`QuotaExceeded`) |
+| Who writes the state | swaps, `settle`, `syncReference` | `settle` records what it pulled; `setQuota` sets the limit |
+| Opt-in | any token holder | `setQuota(amount)` once, as a user call in any FrameGas transaction, bootstrap included. Default: no quota |
+
+**The day without a clock.** `TIMESTAMP` and `NUMBER` are banned in validation, so the day is a counter, `epoch`, in paymaster storage. `settle` (an execution frame, where `block.number` is allowed) advances it when `block.number` reaches `epochStartBlock + 7200`, skipping quiet epochs in one write. `rollEpoch()` does the same for anyone. `epoch` shares a slot with `refTick`, which validation already loads, so reading it costs a warm `SLOAD`.
+
+**Rules.**
+- `spent` counts what `settle` pulled, at most the cap; refunds are not credited back.
+- Lowering a quota applies at once. Raising or removing it applies from the next epoch: the increase is added to this epoch's `spent`, so a key cannot raise today's limit.
+- Validation runs on chain at inclusion, in order, so two pending transactions from one user cannot both pass against the same `spent`.
+- A user whose quota is used up cannot get a transaction validated, so cannot roll the epoch themselves. Any other user's settlement, or anyone calling `rollEpoch()`, does.
+- The SDK reads the quota before simulating: `framegas.quoteRemaining(user)` returns `{ active, limit, spent, remaining, epoch, resetsAtBlock }`, and `quote`/`send` raise `QUOTA_EXCEEDED` instead of sending a transaction validation would reject.
+
+The use-cases guide suggests a `pre_verify` frame for paymaster state; the devnet does not implement it ([finding 9](./docs/findings.md#rule-drift)), so the quota is updated in `settle` instead.
+
 ## Reviewer pointers
 
 All in [`contracts/src/FrameGasPaymaster.sol`](./contracts/src/FrameGasPaymaster.sol).
 
 | What | Where |
 | --- | --- |
-| `getSlot0` read in validation | [L254](./contracts/src/FrameGasPaymaster.sol#L254), quote from `sqrtPriceX96` [L260-261](./contracts/src/FrameGasPaymaster.sol#L260-L261), [L512-516](./contracts/src/FrameGasPaymaster.sol#L512-L516) |
-| Settle-frame binding check: target, `SENDER` mode, selector, not atomic, no value, 132-byte calldata, gas floors | call [L247-248](./contracts/src/FrameGasPaymaster.sol#L247-L248), check [L365-381](./contracts/src/FrameGasPaymaster.sol#L365-L381) |
-| Bootstrap approve-calldata check: `approve(this, n ≥ cap)`, 68 bytes, gas and state gas floors | detection [L244-245](./contracts/src/FrameGasPaymaster.sol#L244-L245), call [L267-269](./contracts/src/FrameGasPaymaster.sol#L267-L269), check [L385-400](./contracts/src/FrameGasPaymaster.sol#L385-L400) |
-| Min-liquidity check (`getLiquidity` against `MIN_LIQUIDITY`) | [L257-258](./contracts/src/FrameGasPaymaster.sol#L257-L258) |
-| Swap / settle / take | `unlock` [L293](./contracts/src/FrameGasPaymaster.sol#L293), callback [L339-346](./contracts/src/FrameGasPaymaster.sol#L339-L346), exact-output swap [L418-430](./contracts/src/FrameGasPaymaster.sol#L418-L430), `sync`, `transferFrom`, `settle`, `take` [L432-436](./contracts/src/FrameGasPaymaster.sol#L432-L436) |
-| Refund frame: last frame only, re-derives settlement from frame statuses, surplus from `FRAMEPARAM` | [L301-336](./contracts/src/FrameGasPaymaster.sol#L301-L336), surplus [L461-478](./contracts/src/FrameGasPaymaster.sol#L461-L478), exact-input swap [L441-457](./contracts/src/FrameGasPaymaster.sol#L441-L457) |
-| Reference tick + `syncReference` | state [L138-140](./contracts/src/FrameGasPaymaster.sol#L138-L140), check [L255-256](./contracts/src/FrameGasPaymaster.sol#L255-L256), advanced in settle [L294](./contracts/src/FrameGasPaymaster.sol#L294), `syncReference` [L352-355](./contracts/src/FrameGasPaymaster.sol#L352-L355), `_advanceReference` [L481-491](./contracts/src/FrameGasPaymaster.sol#L481-L491) |
-| `MAX_TX_COST_WEI` | declared [L128](./contracts/src/FrameGasPaymaster.sol#L128), check [L250-251](./contracts/src/FrameGasPaymaster.sol#L250-L251) |
-| Stake from the constructor, no owner | [L232](./contracts/src/FrameGasPaymaster.sol#L232) |
+| `getSlot0` read in validation | [L284](./contracts/src/FrameGasPaymaster.sol#L284), quote from `sqrtPriceX96` [L290-291](./contracts/src/FrameGasPaymaster.sol#L290-L291), [L614-618](./contracts/src/FrameGasPaymaster.sol#L614-L618) |
+| Settle-frame binding check: target, `SENDER` mode, selector, not atomic, no value, 132-byte calldata, gas floors | call [L277-278](./contracts/src/FrameGasPaymaster.sol#L277-L278), check [L436-452](./contracts/src/FrameGasPaymaster.sol#L436-L452) |
+| Bootstrap approve-calldata check: `approve(this, n ≥ cap)`, 68 bytes, gas and state gas floors | detection [L274-275](./contracts/src/FrameGasPaymaster.sol#L274-L275), call [L299-301](./contracts/src/FrameGasPaymaster.sol#L299-L301), check [L456-471](./contracts/src/FrameGasPaymaster.sol#L456-L471) |
+| Min-liquidity check (`getLiquidity` against `MIN_LIQUIDITY`) | [L287-288](./contracts/src/FrameGasPaymaster.sol#L287-L288) |
+| Swap / settle / take | `unlock` [L326](./contracts/src/FrameGasPaymaster.sol#L326), callback [L410-417](./contracts/src/FrameGasPaymaster.sol#L410-L417), exact-output swap [L489-501](./contracts/src/FrameGasPaymaster.sol#L489-L501), `sync`, `transferFrom`, `settle`, `take` [L503-507](./contracts/src/FrameGasPaymaster.sol#L503-L507) |
+| Refund frame: last frame only, re-derives settlement from frame statuses, surplus from `FRAMEPARAM` | [L372-407](./contracts/src/FrameGasPaymaster.sol#L372-L407), surplus [L563-580](./contracts/src/FrameGasPaymaster.sol#L563-L580), exact-input swap [L543-559](./contracts/src/FrameGasPaymaster.sol#L543-L559) |
+| Reference tick + `syncReference` | state [L141-143](./contracts/src/FrameGasPaymaster.sol#L141-L143), check [L285-286](./contracts/src/FrameGasPaymaster.sol#L285-L286), advanced in settle [L327](./contracts/src/FrameGasPaymaster.sol#L327), `syncReference` [L423-426](./contracts/src/FrameGasPaymaster.sol#L423-L426), `_advanceReference` [L583-593](./contracts/src/FrameGasPaymaster.sol#L583-L593) |
+| `MAX_TX_COST_WEI` | declared [L128](./contracts/src/FrameGasPaymaster.sol#L128), check [L280-281](./contracts/src/FrameGasPaymaster.sol#L280-L281) |
+| Quota check in validation (before the mode branch, so bootstrap is held to it) | call [L296-297](./contracts/src/FrameGasPaymaster.sol#L296-L297), check [L523-528](./contracts/src/FrameGasPaymaster.sol#L523-L528) |
+| Quota storage: `epoch` packed with `refTick`, one slot per user | [L138-161](./contracts/src/FrameGasPaymaster.sol#L138-L161) |
+| Quota recorded in settle, epoch rolled in settle | [L508](./contracts/src/FrameGasPaymaster.sol#L508), [L513-520](./contracts/src/FrameGasPaymaster.sol#L513-L520), [L325](./contracts/src/FrameGasPaymaster.sol#L325), [L531-540](./contracts/src/FrameGasPaymaster.sol#L531-L540) |
+| `setQuota`, `rollEpoch`, `quotaOf` | [L330-351](./contracts/src/FrameGasPaymaster.sol#L330-L351), [L355-357](./contracts/src/FrameGasPaymaster.sol#L355-L357), [L361-366](./contracts/src/FrameGasPaymaster.sol#L361-L366) |
+| Stake from the constructor, no owner | [L262](./contracts/src/FrameGasPaymaster.sol#L262) |
 
 ## Gas per frame
 
@@ -103,6 +130,20 @@ Measured on the devnet on 2026-11-05 at 2 gwei, one user's first and second tran
 
 The validation prefix declares 51,200 (bootstrap) and 46,200 (normal) of the devnet's 100,000 cap, plus 2,800 for the signature. User paid 1.035x (bootstrap) and 1.044x (normal) of the fee; the paymaster ended +0.000024 and +0.000022 ETH. Floors and per-tick costs: [`docs/findings.md`](./docs/findings.md#what-validation-requires-of-a-transaction).
 
+**Quota cost**, measured on the devnet on 2026-11-06 on the same pool, block 1018 to 1038 ([`docs/evidence/quota-live.json`](./docs/evidence/quota-live.json)). The pre-quota rows ran on paymaster `0x7503…9996`, the others on `0x2fc9…f8`, both built from the same source apart from the quota.
+
+| `validate` gas used | Pre-quota paymaster | No quota set | Quota active |
+| --- | --- | --- | --- |
+| Bootstrap | 52,986 | 56,399 (+3,413) | 56,658 (+3,672) |
+| Normal | 48,594 | 51,679 (+3,085) | 51,938 (+3,344) |
+
+| `settle` gas used | Pre-quota paymaster | No quota set | Quota active |
+| --- | --- | --- | --- |
+| Bootstrap | 104,457 | 105,422 | 116,345 |
+| Normal | 114,453 | 115,426 | 126,313 |
+
+The SDK declares 60,000 (bootstrap) and 55,000 (normal) for `validate`. With the 200-gas sender frame and 2,800 for the signature, the bootstrap prefix declares 63,000 of the 100,000 cap, leaving 37,000. `setQuota` as a user call used 14,109 gas plus 97,920 state gas for the new slot. The 5 Nov figures above predate the 2026-11-06 devnet reset; the same pre-quota code uses about 3,150 more validation gas on the reset chain ([finding 27](./docs/findings.md#rule-drift)).
+
 ## Evidence
 
 The devnet was reset on 2026-11-06, and its explorer keeps history in memory, so explorer links from 2026-11-05 no longer resolve. The JSON files in [`docs/evidence/`](./docs/evidence/README.md) hold the admission reports and receipts.
@@ -115,6 +156,8 @@ The devnet was reset on 2026-11-06, and its explorer keeps history in memory, so
 | Same bytes to both mempools, normal | `0x6e76…4ff7`, block 405268 | `docs/evidence/mempool-comparison-normal-0x6e76…{.json,-summary.jpg}` |
 | Staked paymaster reading PoolManager storage, 24/24 checks | `0xcafc…06af`, block 402821 | [`docs/findings.md`](./docs/findings.md#a-staked-contract-paymaster-reading-poolmanager-storage) |
 | Current chain, redeploy smoke test (bootstrap, all frames succeeded, 3.08 fgUSD) | [`0x4c45…7e4d`](https://explorer.altmempool.wtf/tx/0x4c45be67d7ad7682c1cac67a0f6d615cfb6779137258f048c6171a9fdf687e4d) | — |
+| Quota: opt-in inside a bootstrap transaction | [`0xb3e5…b7f7`](https://explorer.altmempool.wtf/tx/0xb3e53ed4816645021f579fe68605982015573466b5a1bc5f43f612a9ca86b7f7), block 1026 | `docs/evidence/quota-live.json` |
+| Quota: bootstrap and normal transactions under a 10 fgUSD quota | [`0x83a3…1e46`](https://explorer.altmempool.wtf/tx/0x83a3f639c235f97b94bf729a01d868a0c97feb7cc50c1d7bb8674cb3847a1e46) (normal), block 1038 | `docs/evidence/quota-live.json` |
 | Demo replay screenshots, both modes, light and dark | | [`docs/evidence/demo/`](./docs/evidence/demo/) |
 
 **Canonical rejection.** `eth_sendRawTransaction` with the signed bytes of `0x6e76…4ff7` returned:
@@ -157,6 +200,7 @@ Full table, rule references and repro scripts: [`docs/findings.md`](./docs/findi
 | 24 | Some admitted transactions are never included |
 | 25 | Block production halted at block 408262 on 2026-11-06; the chain was later reset |
 | 26 | Explorer history was lost when the gateway restarted |
+| 27 | After the reset, the same paymaster code uses about 3,150 more validation gas (48,594 vs 45,429 normal) |
 | — | [Griefing economics](./docs/findings.md#griefing-economics): at 5e13 liquidity, moving the price 480 ticks costs 0.35 fgUSD in fees against a 1.11 fgUSD loss; unprofitable from about 7e14 (≈4 ETH depth) |
 | — | [First-ever tick crossing](./docs/findings.md#gas-by-ticks-crossed): needs 195,840 state gas; at the 0 floor, settlement failed and the paymaster lost 0.000466 ETH |
 | — | [Worst-case loss](./docs/findings.md#worst-case-loss-per-transaction): bounded by `MAX_TX_COST_WEI`, 0.002 ETH on the devnet; fuzzed over 10,000 runs |
@@ -169,6 +213,7 @@ Full table, rule references and repro scripts: [`docs/findings.md`](./docs/findi
 - **Max-uint permit deadline.** Validation cannot read `TIMESTAMP`, so it only accepts permits with `deadline = type(uint256).max`. The permit's value and nonce bound it. Tokens without EIP-2612 use bootstrap mode; Permit2 is not built.
 - **Eviction.** A swap that moves the tick past `maxDeviation` (1,000 ticks), or the quote past a user's cap, evicts pending transactions that read that slot.
 - **Thin-pool loss bound.** If settlement fails after `APPROVE`, the user's call runs and the paymaster pays the fee, at most `MAX_TX_COST_WEI` per transaction. The devnet's `MIN_LIQUIDITY` is 1e12, a demo value; the production floor where griefing stops paying is about 7e14.
+- **Quota liveness.** An exhausted user's epoch rolls only when another user settles or someone calls `rollEpoch()`. Refunds do not reduce `spent`. An active quota adds about 10,900 gas to `settle`.
 - **Overpayment.** The user pays about 1.04x the fee, because `settle` buys the maximum cost and `refund` returns a conservative estimate.
 
 ## Uniswap integration
@@ -185,7 +230,24 @@ The paymaster stakes 0.012 ETH in the ERC-8421 staking registry from its constru
 | `sdk/` | `@framegas/sdk`: simulates for frame limits, quotes, builds, signs, submits |
 | `mcp/` | `@framegas/mcp`: `framegas_quote`, `framegas_send`, `framegas_budget` |
 | `demo/` | Next.js console: replay from `docs/evidence/`, live through the SDK |
-| `scripts/` | `redeploy.sh` and the numbered scripts that reproduce each finding |
+| `scripts/` | `redeploy.sh` and the numbered scripts that reproduce each finding; `10-quota-live.ts` measures the quota |
+| `cre/` | Chainlink CRE workflow: mainnet vs devnet price divergence, see below |
+
+## Chainlink CRE workflow
+
+[`cre/divergence/main.ts`](./cre/divergence/main.ts) runs on a cron trigger every 5 minutes:
+
+1. EVM read on Ethereum mainnet: `StateView.getSlot0` of the native ETH/USDC 0.3% v4 pool, at the last finalized block.
+2. HTTP read of the devnet fgUSD pool's `slot0` through the alt-mempool gateway (`eth_getBlockByNumber`, `eth_call`), agreed with identical-value consensus. If the gateway fails, the pool is gone, or the latest block is older than 300 s, it uses the snapshot [`cre/sync-config.ts`](./cre/sync-config.ts) took from `deployments/devnet.json`.
+3. Divergence between the two ETH prices. Above 3% it logs an alert and prepares the paymaster's `syncReference()` calldata with a tick bound of mainnet ± 300 ticks. The write is mocked: the payload is logged, nothing is sent. The paymaster has no on-chain setter for the bound.
+
+```sh
+cd cre/divergence && bun install && bun run ../sync-config.ts
+cre login                                    # the CLI requires a CRE account, even to simulate
+cre workflow simulate ./divergence -R .. -T staging-settings --non-interactive --trigger-index 0 | tee ../simulation.log
+```
+
+The simulation log goes to `cre/simulation.log`. It has not been recorded yet: CRE CLI v1.39.0 refuses `simulate` without a login.
 
 ## AI usage disclosure
 
