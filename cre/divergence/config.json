@@ -1,0 +1,23 @@
+{
+  "schedule": "0 */5 * * * *",
+  "thresholdBps": 300,
+  "boundTicks": 300,
+  "staleSeconds": 300,
+  "mainnet": {
+    "chainSelectorName": "ethereum-mainnet",
+    "stateView": "0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227",
+    "poolId": "0xdce6394339af00981949f5f3baf27e3610c76326a700af57e4b3e3ae4977f78d"
+  },
+  "devnet": {
+    "gatewayUrl": "https://altmempoolgateway.forshtat.com/rpc",
+    "stateView": "0xd89a052862AaA34f0B6cc7f3B6a9D080584a43FB",
+    "poolId": "0x54078dc76392ab22ff5aa126186285a6c9809ac03f23da66e8452106533f9138",
+    "paymaster": "0x2fc9a3f25c65d38f83bdb128c23728cc5ef75af8",
+    "fallback": {
+      "sqrtPriceX96": "3760796882188133569559208",
+      "tick": -199120,
+      "block": 1057,
+      "source": "deployments/devnet.json pool, snapshot at block 1057"
+    }
+  }
+}

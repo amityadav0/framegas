@@ -1,0 +1,5 @@
+# CRE project settings. Simulation only: mainnet is read through a public RPC, nothing is deployed or broadcast.
+staging-settings:
+  rpcs:
+    - chain-name: ethereum-mainnet
+      url: https://ethereum-rpc.publicnode.com

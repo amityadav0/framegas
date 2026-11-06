@@ -43,6 +43,7 @@ coverage/
 cre/.cre/
 cre/**/node_modules/
 cre/**/*.wasm
+!cre/simulation.log
 
 # --- OS / editor ---
 .DS_Store
