@@ -82,13 +82,18 @@ export async function sendTool(ctx: ToolContext, input: { payToken: string; maxT
 
 export async function budgetTool(ctx: ToolContext, input: { payToken: string; calls?: CallInput[] }) {
   const token = resolveToken(ctx.tokens, input.payToken);
-  const account = await ctx.framegas.account(token.address);
+  const [account, q0] = await Promise.all([ctx.framegas.account(token.address), ctx.framegas.quoteRemaining(undefined, token.address)]);
+  const units = (v: bigint) => formatUnits(v, token.decimals);
+  const quota = q0.active
+    ? { active: true, limit: units(q0.limit), spent: units(q0.spent), remaining: units(q0.remaining), epoch: q0.epoch, resetsAtBlock: q0.resetsAtBlock.toString() }
+    : { active: false };
   const base = {
     token: token.symbol,
     sender: account.sender,
     paymaster: account.paymaster,
-    balance: formatUnits(account.balance, token.decimals),
-    allowance: formatUnits(account.allowance, token.decimals),
+    balance: units(account.balance),
+    allowance: units(account.allowance),
+    quota,
   };
   if (!input.calls?.length) return base;
   const q = await ctx.framegas.quote({ payToken: token.address, calls: toCalls(input.calls) });
@@ -100,7 +105,7 @@ export async function budgetTool(ctx: ToolContext, input: { payToken: string; ca
       requiredTokens: formatUnits(q.requiredTokens, token.decimals),
       estimatedTokens: formatUnits(q.estimatedTokens, token.decimals),
     },
-    canSendNow: account.balance >= q.requiredTokens,
+    canSendNow: account.balance >= q.requiredTokens && q0.remaining >= q.requiredTokens,
     transactionsLikeThisAffordable: Number(affordable),
   };
 }

@@ -14,7 +14,7 @@ const TO = "0x8943545177806ED17B9F23F0a21ee5948eCaa776";
 const tokens: TokenInfo[] = [{ symbol: "fgUSD", address: TOKEN, decimals: 6 }];
 
 /** A gateway that answers like the devnet, recording what was sent. */
-function gateway(opts: { balance?: bigint; allowance?: bigint; reject?: string } = {}) {
+function gateway(opts: { balance?: bigint; allowance?: bigint; reject?: string; quota?: readonly [bigint, bigint, bigint] } = {}) {
   const sent: string[] = [];
   const reads: Record<string, bigint> = {
     MIN_SETTLE_GAS: 150_000n,
@@ -26,7 +26,11 @@ function gateway(opts: { balance?: bigint; allowance?: bigint; reject?: string }
     balanceOf: opts.balance ?? parseUnits("10", 6),
     allowance: opts.allowance ?? 0n,
     quote: parseUnits("1.6", 6),
+    epoch: 2n,
+    epochStartBlock: 14_400n,
+    EPOCH_BLOCKS: 7_200n,
   };
+  const tuples: Record<string, readonly bigint[]> = { quotaOf: opts.quota ?? [0n, 0n, 2n ** 256n - 1n] };
   const simulation = (frames: number): RawSimulation => ({
     canonicalMempoolValid: false,
     canonicalMempoolViolation: "StorageReadNonSender",
@@ -37,7 +41,7 @@ function gateway(opts: { balance?: bigint; allowance?: bigint; reject?: string }
     maxCost: "0x24000000000000",
   });
   const chain: Chain = {
-    read: async <T,>(_to: Address, _abi: unknown, fn: string) => reads[fn] as T,
+    read: async <T,>(_to: Address, _abi: unknown, fn: string) => (tuples[fn] ?? reads[fn]) as T,
     simulate: async () => simulation(reads.allowance! >= parseUnits("2", 6) ? 5 : 6),
     rpc: async (method) => {
       sent.push(method);
@@ -130,9 +134,11 @@ describe("the MCP server", () => {
   });
 
   it("rejects a malformed address before anything is simulated", async () => {
-    const { call } = await connect();
-    const { body } = await call("framegas_quote", { payToken: "fgUSD", calls: [{ to: "0x123" }] });
-    expect(body.error.message).toContain("invalid address");
+    const { client, sent } = await connect();
+    const res = (await client.callTool({ name: "framegas_quote", arguments: { payToken: "fgUSD", calls: [{ to: "0x123" }] } })) as { content: { text: string }[]; isError?: boolean };
+    expect(res.isError).toBe(true);
+    expect(res.content[0]!.text).toContain("20-byte address");
+    expect(sent).toHaveLength(0);
   });
 
   it("reports balance and allowance, and how many transactions it covers", async () => {
@@ -149,5 +155,43 @@ describe("resolveToken", () => {
   it("finds by symbol in any case, and by address", () => {
     expect(resolveToken(tokens, "FGUSD").address).toBe(TOKEN);
     expect(resolveToken(tokens, TOKEN.toUpperCase().replace("0X", "0x")).symbol).toBe("fgUSD");
+  });
+});
+
+describe("schemas and quotas", () => {
+  it("describes every input and constrains addresses and amounts", async () => {
+    const { client } = await connect();
+    const { tools } = await client.listTools();
+    for (const t of tools) {
+      const props = t.inputSchema.properties as Record<string, { description?: string }>;
+      for (const [name, prop] of Object.entries(props)) expect(prop.description, `${t.name}.${name}`).toBeTruthy();
+    }
+    const send = tools.find((t) => t.name === "framegas_send")!;
+    expect(send.inputSchema.required).toEqual(expect.arrayContaining(["payToken", "maxTokenCost", "calls"]));
+    expect(JSON.stringify(send.inputSchema)).toContain("pattern");
+  });
+
+  it("refuses a malformed amount or address at the schema, before the SDK runs", async () => {
+    const { client, sent } = await connect();
+    const bad = (await client.callTool({ name: "framegas_send", arguments: { payToken: "fgUSD", maxTokenCost: "two", calls } })) as { isError?: boolean };
+    expect(bad.isError).toBe(true);
+    const badTo = (await client.callTool({ name: "framegas_quote", arguments: { payToken: "fgUSD", calls: [{ to: "0x1234" }] } })) as { isError?: boolean };
+    expect(badTo.isError).toBe(true);
+    expect(sent).toHaveLength(0);
+  });
+
+  it("reports no quota by default", async () => {
+    const { call } = await connect();
+    const { body } = await call("framegas_budget", { payToken: "fgUSD" });
+    expect(body.quota).toEqual({ active: false });
+  });
+
+  it("reports an active quota and says the next transaction cannot go when it is used up", async () => {
+    const { call } = await connect({ allowance: parseUnits("50", 6), quota: [parseUnits("10", 6), parseUnits("9", 6), parseUnits("1", 6)] });
+    const { body } = await call("framegas_budget", { payToken: "fgUSD" });
+    expect(body.quota).toEqual({ active: true, limit: "10", spent: "9", remaining: "1", epoch: 2, resetsAtBlock: "21600" });
+    const quoted = await call("framegas_quote", { payToken: "fgUSD", calls });
+    expect(quoted.isError).toBe(true);
+    expect(quoted.body.error.code).toBe("QUOTA_EXCEEDED");
   });
 });
