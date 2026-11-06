@@ -6,13 +6,18 @@
 - Transactions enter through the [ERC-8421 alternative mempool](https://docs.altmempool.wtf/), which admits validation that reads the PoolManager's storage once the paymaster is staked. The canonical mempool refuses the same bytes.
 - No relayer, no sponsor treasury, no off-chain price signer, no owner. Built at ETHGlobal Mumbai, 5–7 Nov 2026, on the alt-mempool devnet (chain 1337). EIP-8141 is scheduled for the Hegotá fork and is not on mainnet.
 
+**Demo:** _URL pending: Vercel deployment of `demo/` in Replay mode._ · **Clips:** [`docs/evidence/video/`](./docs/evidence/video/README.md) · **Findings:** 29 on the devnet versus the rule texts, grouped at the top of [`docs/findings.md`](./docs/findings.md): rule caps (flat 100,000 validation gas), banned opcodes (`GAS`, `TIMESTAMP`), missing precompiles (no `ecrecover` in validation), gateway relay and liveness (halt, transactions relayed an hour late or dropped, dropped-then-mined), explorer memory.
+
 ## Quickstart
 
 ```sh
+git clone --recursive https://github.com/amityadav0/framegas.git && cd framegas   # --recursive fetches the Foundry libraries
 pnpm install
-scripts/redeploy.sh --fresh              # token, pool, liquidity, staked paymaster, demo contracts, smoke test
-pnpm --filter @framegas/demo dev         # http://localhost:3000, replay mode needs no chain
+pnpm --filter @framegas/demo build && pnpm --filter @framegas/demo start          # http://localhost:3000, Replay needs no chain and no env vars
+scripts/redeploy.sh --fresh              # optional, devnet only: token, pool, liquidity, staked paymaster, demo contracts, smoke test
 ```
+
+The demo builds with webpack (`pnpm build` runs `next build --webpack`): the SDK is TypeScript source with NodeNext `./x.js` imports, which Turbopack, Next 16's default for a bare `next build`, does not resolve. Live mode needs `FRAMEGAS_DEMO_KEY`, a devnet key holding fgUSD and no ETH.
 
 `redeploy.sh` generates a deployer key into the git-ignored `.env` and funds it from the devnet faucet. It locks about 0.085 ETH (0.33 ETH with `--seed-eth 0.3`) and writes [`deployments/devnet.json`](./deployments/devnet.json).
 
@@ -28,7 +33,7 @@ const r = await framegas.send({ payToken: deployment.fgUSD, maxTokenCost: (requi
 // r.hash, r.explorerUrl, r.tokensPaid, r.tokensRefunded, r.frames
 ```
 
-Tests: `forge test --root contracts` (97, including a whole-transaction fuzz suite and 20 quota tests), `pnpm --filter @framegas/sdk test`, `pnpm --filter @framegas/demo test`.
+Tests: `forge test --root contracts` (97, including a whole-transaction fuzz suite and 20 quota tests), `pnpm --filter @framegas/sdk test` (41), `pnpm --filter @framegas/mcp test` (14), `pnpm --filter @framegas/demo test` (29). All of the above, apart from `redeploy.sh`, were run from a clean clone on 2026-11-06.
 
 ## How it works
 
@@ -103,32 +108,34 @@ All in [`contracts/src/FrameGasPaymaster.sol`](./contracts/src/FrameGasPaymaster
 
 ## Gas per frame
 
-Measured on the devnet on 2026-11-05 at 2 gwei, one user's first and second transaction, each with one `transfer` call. Limit is what the signed transaction declared.
+Measured on the current deployment on 2026-11-06 at 2 gwei by `scripts/08-sdk-live.ts`: one user's first and second transaction, each with two `transfer` calls (the second to an address that held none, so it writes a new balance slot in the first transaction). Limit is what the signed transaction declared.
 
-**Bootstrap** — [`0x08a9…9bf7`](https://explorer.altmempool.wtf/tx/0x08a9d9386e14a428a3ba77a01719eec9be6f1fe7731608efa9d7140f974b9bf7), block 405098
+**Bootstrap** — [`0x45fc…1dd3`](https://explorer.altmempool.wtf/tx/0x45fcd889938d04890cedf379a8bd83e3e34b818a71ac7975b65c742eaa4e1dd3), block 1213
 
 | # | Frame | Mode | Gas used / limit | State gas used / limit |
 | --- | --- | --- | --- | --- |
 | 0 | sender signature | VERIFY | 100 / 200 | 0 |
-| 1 | `validate` | VERIFY | 49,835 / 51,000 | 0 |
+| 1 | `validate` | VERIFY | 56,399 / 60,000 | 0 |
 | 2 | `approve` | SENDER | 14,472 / 30,000 | 97,920 / 97,920 |
-| 3 | `settle` | SENDER | 106,254 / 150,000 | 0 |
-| 4 | user call | SENDER | 15,074 / 16,000 | 0 |
-| 5 | `refund` | SENDER | 78,454 / 90,500 | 0 |
-| | Total | | 382,895 | fee 0.000766 ETH, user paid 1.938 fgUSD |
+| 3 | `settle` | SENDER | 105,426 / 150,000 | 0 |
+| 4 | call 0 | SENDER | 15,074 / 18,016 | 0 |
+| 5 | call 1 | SENDER | 15,074 / 18,016 | 97,920 / 97,920 |
+| 6 | `refund` | SENDER | 83,524 / 96,000 | 0 |
+| | Total | | 507,574 | fee 0.001015 ETH, user paid 2.332470 fgUSD net, paymaster +0.000025 ETH |
 
-**Normal** — [`0xbd24…88e7`](https://explorer.altmempool.wtf/tx/0xbd24f1a8c1aaa9fe667e5640de154c922ef18e55346808915b14fd0feb3b88e7), block 405103
+**Normal** — [`0x08c4…b6b7`](https://explorer.altmempool.wtf/tx/0x08c4836702188f61108cb21f7e0067ef07f2a47e7bc123ceda62cdcf1835b6b7), block 1221
 
 | # | Frame | Mode | Gas used / limit | State gas used / limit |
 | --- | --- | --- | --- | --- |
 | 0 | sender signature | VERIFY | 100 / 200 | 0 |
-| 1 | `validate` | VERIFY | 45,429 / 46,000 | 0 |
-| 2 | `settle` | SENDER | 116,190 / 150,000 | 0 |
-| 3 | user call | SENDER | 15,074 / 16,000 | 0 |
-| 4 | `refund` | SENDER | 73,946 / 85,000 | 0 |
-| | Total | | 270,466 | fee 0.000541 ETH, user paid 1.383 fgUSD |
+| 1 | `validate` | VERIFY | 51,679 / 55,000 | 0 |
+| 2 | `settle` | SENDER | 115,390 / 150,000 | 0 |
+| 3 | call 0 | SENDER | 15,074 / 18,016 | 0 |
+| 4 | call 1 | SENDER | 15,074 / 18,016 | 0 |
+| 5 | `refund` | SENDER | 77,827 / 90,500 | 0 |
+| | Total | | 295,714 | fee 0.000591 ETH, user paid 1.385196 fgUSD net, paymaster +0.000025 ETH |
 
-The validation prefix declares 51,200 (bootstrap) and 46,200 (normal) of the devnet's 100,000 cap, plus 2,800 for the signature. User paid 1.035x (bootstrap) and 1.044x (normal) of the fee; the paymaster ended +0.000024 and +0.000022 ETH. Floors and per-tick costs: [`docs/findings.md`](./docs/findings.md#what-validation-requires-of-a-transaction).
+The validation prefix declares 63,000 (bootstrap) and 58,000 (normal) of the devnet's 100,000 cap, counting the 200-gas sender frame and 2,800 for the signature. Floors and per-tick costs: [`docs/findings.md`](./docs/findings.md#what-validation-requires-of-a-transaction). The 2026-11-05 measurements on the earlier chain, with one call per transaction, are in [`docs/findings.md`](./docs/findings.md#end-to-end-transactions).
 
 **Quota cost**, measured on the devnet on 2026-11-06 on the same pool, block 1018 to 1038 ([`docs/evidence/quota-live.json`](./docs/evidence/quota-live.json)). The pre-quota rows ran on paymaster `0x7503…9996`, the others on `0x2fc9…f8`, both built from the same source apart from the quota.
 
@@ -142,33 +149,32 @@ The validation prefix declares 51,200 (bootstrap) and 46,200 (normal) of the dev
 | Bootstrap | 104,457 | 105,422 | 116,345 |
 | Normal | 114,453 | 115,426 | 126,313 |
 
-The SDK declares 60,000 (bootstrap) and 55,000 (normal) for `validate`. With the 200-gas sender frame and 2,800 for the signature, the bootstrap prefix declares 63,000 of the 100,000 cap, leaving 37,000. `setQuota` as a user call used 14,109 gas plus 97,920 state gas for the new slot. The 5 Nov figures above predate the 2026-11-06 devnet reset; the same pre-quota code uses about 3,150 more validation gas on the reset chain ([finding 27](./docs/findings.md#rule-drift)).
+`setQuota` as a user call used 14,109 gas plus 97,920 state gas for the new slot. The same pre-quota code uses about 3,150 more validation gas on the reset chain than it did on 2026-11-05 ([finding 27](./docs/findings.md#rule-drift)).
 
 ## Evidence
 
-The devnet was reset on 2026-11-06, and its explorer keeps history in memory, so explorer links from 2026-11-05 no longer resolve. The JSON files in [`docs/evidence/`](./docs/evidence/README.md) hold the admission reports and receipts.
+Current deployment (2026-11-06, chain reset that morning). The explorer keeps history in memory, so the JSON files in [`docs/evidence/`](./docs/evidence/README.md) hold each admission report and receipt in case a link stops resolving.
 
 | What | Transaction | Files |
 | --- | --- | --- |
-| Bootstrap, 24/24 checks | `0x08a9…9bf7`, block 405098 | `docs/evidence/bootstrap-0x08a9…{-summary.jpg,-frames.jpg,.json}` |
-| Normal, 24/24 checks | `0xbd24…88e7`, block 405103 | `docs/evidence/normal-0xbd24…{-summary.jpg,-frames.jpg,.json}` |
-| Same bytes to both mempools, bootstrap | `0x2b73…a331`, block 405263 | `docs/evidence/mempool-comparison-bootstrap-0x2b73…{.json,-summary.jpg}` |
-| Same bytes to both mempools, normal | `0x6e76…4ff7`, block 405268 | `docs/evidence/mempool-comparison-normal-0x6e76…{.json,-summary.jpg}` |
-| Staked paymaster reading PoolManager storage, 24/24 checks | `0xcafc…06af`, block 402821 | [`docs/findings.md`](./docs/findings.md#a-staked-contract-paymaster-reading-poolmanager-storage) |
-| Current deployment, SDK end to end, bootstrap, canonical rejected, 24/24 | [`0x45fc…1dd3`](https://explorer.altmempool.wtf/tx/0x45fcd889938d04890cedf379a8bd83e3e34b818a71ac7975b65c742eaa4e1dd3), block 1213 | `docs/evidence/sdk-live-bootstrap-0x45fc…{.json,-summary.jpg,-frames.jpg}` |
-| Current deployment, SDK end to end, normal, canonical rejected, 24/24 | [`0x08c4…b6b7`](https://explorer.altmempool.wtf/tx/0x08c4836702188f61108cb21f7e0067ef07f2a47e7bc123ceda62cdcf1835b6b7), block 1221 | `docs/evidence/sdk-live-normal-0x08c4…{.json,-summary.jpg,-frames.jpg}` |
+| SDK end to end, bootstrap: canonical rejected, alt-mempool 24/24, mined | [`0x45fc…1dd3`](https://explorer.altmempool.wtf/tx/0x45fcd889938d04890cedf379a8bd83e3e34b818a71ac7975b65c742eaa4e1dd3), block 1213 | `docs/evidence/sdk-live-bootstrap-0x45fc…{.json,-summary.jpg,-frames.jpg}` |
+| SDK end to end, normal: canonical rejected, alt-mempool 24/24, mined | [`0x08c4…b6b7`](https://explorer.altmempool.wtf/tx/0x08c4836702188f61108cb21f7e0067ef07f2a47e7bc123ceda62cdcf1835b6b7), block 1221 | `docs/evidence/sdk-live-normal-0x08c4…{.json,-summary.jpg,-frames.jpg}` |
+| Demo Live mode: 5 fgUSD → ETH swap on Uniswap v4 from a zero-ETH wallet, 7/7 frames, mined 72 min after admission | [`0xb795…437b`](https://explorer.altmempool.wtf/tx/0xb795dfdf47d533c54d3b4570fcfdcde54d8964c2bf1f53fd73df7400d2de437b), block 1977 | `docs/evidence/demo-live-swap-0xb795….json` |
 | Quota: opt-in inside a bootstrap transaction | [`0xb3e5…b7f7`](https://explorer.altmempool.wtf/tx/0xb3e53ed4816645021f579fe68605982015573466b5a1bc5f43f612a9ca86b7f7), block 1026 | `docs/evidence/quota-live.json` |
-| Quota: bootstrap and normal transactions under a 10 fgUSD quota | [`0x83a3…1e46`](https://explorer.altmempool.wtf/tx/0x83a3f639c235f97b94bf729a01d868a0c97feb7cc50c1d7bb8674cb3847a1e46) (normal), block 1038 | `docs/evidence/quota-live.json` |
-| Demo replay screenshots, both modes, light and dark | | [`docs/evidence/demo/`](./docs/evidence/demo/) |
-| Demo clip (Replay, 89 s) and terminal clip of `08-sdk-live.ts` output (30 s) | | [`docs/evidence/video/`](./docs/evidence/video/README.md) |
+| Quota: normal transaction under a 10 fgUSD quota | [`0x83a3…1e46`](https://explorer.altmempool.wtf/tx/0x83a3f639c235f97b94bf729a01d868a0c97feb7cc50c1d7bb8674cb3847a1e46), block 1038 | `docs/evidence/quota-live.json` |
+| Demo clip (Replay, 89 s) and terminal clip of the `08-sdk-live.ts` output (30 s) | | [`docs/evidence/video/`](./docs/evidence/video/README.md) |
+| Demo screenshots, both themes | | [`docs/evidence/demo/`](./docs/evidence/demo/) |
+| CRE simulation: default, alert and gateway-down runs | | [`cre/simulation.log`](./cre/simulation.log) |
 
-**Canonical rejection.** `eth_sendRawTransaction` with the signed bytes of `0x6e76…4ff7` returned:
+**Canonical rejection.** `scripts/08-sdk-live.ts` sent the signed bytes of `0x08c4…b6b7` to `eth_sendRawTransaction` first, which returned:
 
 ```text
 Invalid params: Frame transaction validation-prefix simulation failed: StorageReadNonSender
 ```
 
-`eth_sendFrameTransaction` with the same bytes returned `admitted: true`, and the transaction was mined in block 405268. The `signedRawTx` field in each comparison file holds the bytes.
+`eth_sendFrameTransaction` with the same bytes was admitted with 24/24 checks, and the transaction was mined in block 1221.
+
+Earlier chain (2026-11-05, reset on 2026-11-06, explorer links no longer resolve): bootstrap `0x08a9…9bf7` and normal `0xbd24…88e7` with 24/24 admission reports; the same signed bytes sent to both mempools, `0x2b73…a331` and `0x6e76…4ff7`, with the bytes in `signedRawTx`; the first staked paymaster reading PoolManager storage, `0xcafc…06af` ([findings](./docs/findings.md#a-staked-contract-paymaster-reading-poolmanager-storage)). Files and index: [`docs/evidence/README.md`](./docs/evidence/README.md#earlier-chain-2026-11-05).
 
 ## Findings index
 
@@ -199,7 +205,7 @@ Full table, rule references and repro scripts: [`docs/findings.md`](./docs/findi
 | 21 | 97,920 state gas per new storage slot; execution gas cannot substitute |
 | 22 | A failed frame does not stop later frames |
 | 23 | The mempool admits transactions whose settlement will fail |
-| 24 | Some admitted transactions are never included |
+| 24 | Some admitted transactions wait minutes or are never included |
 | 25 | Block production halted at block 408262 on 2026-11-06; the chain was later reset |
 | 26 | Explorer history was lost when the gateway restarted |
 | 27 | After the reset, the same paymaster code uses about 3,150 more validation gas (48,594 vs 45,429 normal) |
@@ -212,7 +218,7 @@ Full table, rule references and repro scripts: [`docs/findings.md`](./docs/findi
 
 ## Limitations
 
-- **Devnet only.** EIP-8141 is not on mainnet until Hegotá. The devnet halts, resets, and leaves some admitted transactions unmined.
+- **Devnet only.** EIP-8141 is not on mainnet until Hegotá. The devnet has halted, been reset, and relayed admitted transactions to its miner an hour late or not at all ([finding 28](./docs/findings.md#rule-drift)); the demo shows such a transaction as stuck at the gateway instead of waiting.
 - **Locked stake.** The paymaster has no owner, so nothing can call `unlockStake`. A new token needs a new deployment and new stake.
 - **Max-uint permit deadline.** Validation cannot read `TIMESTAMP`, so it only accepts permits with `deadline = type(uint256).max`. The permit's value and nonce bound it. Tokens without EIP-2612 use bootstrap mode; Permit2 is not built.
 - **Eviction.** A swap that moves the tick past `maxDeviation` (1,000 ticks), or the quote past a user's cap, evicts pending transactions that read that slot.
@@ -233,7 +239,7 @@ The paymaster stakes 0.012 ETH in the ERC-8421 staking registry from its constru
 | `contracts/` | Foundry: `FrameGasPaymaster`, `FgUSD`, demo `MockLendingPool`, unit and fuzz tests |
 | `sdk/` | `@framegas/sdk`: simulates for frame limits, quotes, builds, signs, submits |
 | `mcp/` | `@framegas/mcp`: `framegas_quote`, `framegas_send`, `framegas_budget` |
-| `demo/` | Next.js console: replay from `docs/evidence/`, live through the SDK |
+| `demo/` | Next.js console: Replay from `docs/evidence/` (default, no env vars), Live through the SDK. Vercel: root directory `demo`, build command `pnpm build` |
 | `scripts/` | `redeploy.sh` and the numbered scripts that reproduce each finding; `10-quota-live.ts` measures the quota |
 | `cre/` | Chainlink CRE workflow: mainnet vs devnet price divergence, see below |
 | `skill/` | Agent skill in the Uniswap AI format, with two eval cases |

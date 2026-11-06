@@ -6,3 +6,5 @@
 | [`framegas-sdk-live-terminal.gif`](./framegas-sdk-live-terminal.gif) | 30 s | `cat docs/evidence/sdk-live-output.txt`: the saved output of that `scripts/08-sdk-live.ts` run, printed line by line in a terminal-styled page. The script was not re-run for the clip. |
 
 Both were captured from the browser as frames and assembled into GIFs; frame delays were set afterwards so the clips play at the lengths above. A Live-mode clip is pending. The demo's Live swap on 2026-11-06 (`docs/evidence/demo-live-swap-0xb795….json`) was admitted at 14:04 IST and mined 72 minutes later, after the demo had stopped waiting ([finding 28](../../findings.md#rule-drift)).
+
+Shot list and voiceover for the 3-minute recording: [`SHOTLIST.md`](./SHOTLIST.md).
