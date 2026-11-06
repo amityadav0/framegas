@@ -43,6 +43,7 @@ coverage/
 cre/.cre/
 cre/**/node_modules/
 cre/**/*.wasm
+cre/**/.cre_build_tmp.js
 
 # --- OS / editor ---
 .DS_Store
