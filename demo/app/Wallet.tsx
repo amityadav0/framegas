@@ -129,11 +129,18 @@ export function Wallet(p: Props) {
             {replay ? "Replay transaction" : p.busy ? "Sending…" : "Sign and send"}
           </Button>
         </div>
-        {p.error && (
+        {p.error && p.error.code === "ALREADY_PENDING" ? (
+          <p className="text-[11.5px] text-muted break-words">
+            An earlier send from this wallet is still at the gateway: admitted, not yet relayed to the miner. Nothing new can go out from this account until the gateway mines or drops it, usually within the hour.{" "}
+            <a className="underline decoration-line-strong underline-offset-2 hover:decoration-fg" href="https://explorer.altmempool.wtf/" target="_blank" rel="noreferrer">
+              Gateway pool ↗
+            </a>
+          </p>
+        ) : p.error ? (
           <p className="num text-[11.5px] !text-bad break-words">
             {p.error.code}: {p.error.message}
           </p>
-        )}
+        ) : null}
       </div>
     </Panel>
   );

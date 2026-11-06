@@ -23,6 +23,13 @@ const DEFAULT_MAX_FEE = 2_000_000_000n;
 const DEFAULT_APPROVE_MULTIPLE = 20n;
 /** The devnet sometimes takes minutes to include an admitted transaction, and occasionally never does. */
 const DEFAULT_MINE_TIMEOUT_MS = 600_000;
+/**
+ * The alt-mempool node transactions go to. The default is the sidecar of the devnet's miner, the only node that
+ * builds blocks: it admits with the same rules as the public gateway and needs no P2P relay. The gateway,
+ * `https://altmempoolgateway.forshtat.com/rpc`, admits too, but has been seen holding admitted transactions for
+ * an hour, or dropping them, when its peer link to the miner is down (findings 28 and 30).
+ */
+export const DEFAULT_NODE_URL = "https://altmempool.forshtat.com/rpc";
 
 export interface Call {
   to: Address;
@@ -38,6 +45,7 @@ export interface FrameGasConfig {
   paymasters: Record<string, Address>;
   /** A contract wallet the key owns. Without it, the key's own account sends. */
   sender?: Address;
+  /** The alt-mempool node to validate against and submit to. Defaults to `DEFAULT_NODE_URL`. */
   gatewayUrl?: string;
   executionUrl?: string;
   explorerUrl?: string;
@@ -157,7 +165,7 @@ const quotaSelector = toFunctionSelector("QuotaExceeded(uint256,uint256,uint256)
 export function createFrameGas(config: FrameGasConfig) {
   const chain =
     config.chain ??
-    httpChain(config.gatewayUrl ?? "https://altmempoolgateway.forshtat.com/rpc", config.executionUrl ?? "https://altmempool.forshtat.com");
+    httpChain(config.gatewayUrl ?? DEFAULT_NODE_URL, config.executionUrl ?? "https://altmempool.forshtat.com");
   const signer = privateKeyToAccount(config.privateKey);
   const sender = config.sender ?? signer.address;
   const chainId = config.chainId ?? 1337;
@@ -425,6 +433,11 @@ export function createFrameGas(config: FrameGasConfig) {
       hash = await chain.rpc("eth_sendFrameTransaction", [toWire(signed)]);
     } catch (e) {
       const message = (e as Error).message;
+      if (/already known/i.test(message)) {
+        // The gateway holds an earlier transaction from this sender at this nonce, admitted but not yet mined or
+        // dropped. Nothing new can be sent from the account until the gateway resolves it.
+        throw new FrameGasError("ALREADY_PENDING", `an earlier transaction from ${sender} at nonce ${signed.nonceSeq} is still at the gateway; wait for it to be mined or dropped`, { message, sender, nonce: signed.nonceSeq });
+      }
       const decoded = decodePaymasterError(message);
       throw new FrameGasError("REJECTED", `the alt-mempool rejected the transaction: ${decoded ? decoded.name : message}`, { message, decoded });
     }

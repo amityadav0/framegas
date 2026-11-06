@@ -114,6 +114,13 @@ describe("submit and collect", () => {
   });
 });
 
+describe("a sender with a transaction still at the gateway", () => {
+  it("reports ALREADY_PENDING instead of a generic rejection", async () => {
+    const { client } = world({ allowance: cap, reject: "Frame transaction already known" });
+    await expect(client.submit({ payToken: TOKEN, maxTokenCost: cap, calls: [CALL] })).rejects.toMatchObject({ code: "ALREADY_PENDING", details: { nonce: 0n } });
+  });
+});
+
 describe("send", () => {
   it("detects a first transaction from the allowance, and sends an approve frame", async () => {
     const { client } = world({ allowance: 0n });

@@ -13,6 +13,7 @@ export type FrameGasErrorCode =
   | "SETTLEMENT_WILL_FAIL"
   | "CALL_WILL_REVERT"
   | "REJECTED"
+  | "ALREADY_PENDING"
   | "NOT_MINED";
 
 /** Every failure the SDK raises itself. `details` holds what a caller needs to react, such as the tokens required. */

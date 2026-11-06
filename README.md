@@ -8,7 +8,7 @@
 - Transactions enter through the [ERC-8421 alternative mempool](https://docs.altmempool.wtf/), which admits validation that reads the PoolManager's storage once the paymaster is staked. The canonical mempool refuses the same bytes.
 - No relayer, no sponsor treasury, no off-chain price signer, no owner. Built at ETHGlobal Mumbai, 5–7 Nov 2026, on the alt-mempool devnet (chain 1337). EIP-8141 is scheduled for the Hegotá fork and is not on mainnet.
 
-**Demo:** <https://framegas-demo.netlify.app> (Replay mode) · **Clips:** [`docs/evidence/video/`](./docs/evidence/video/README.md) · **Findings:** 29 on the devnet versus the rule texts, grouped at the top of [`docs/findings.md`](./docs/findings.md): rule caps (flat 100,000 validation gas), banned opcodes (`GAS`, `TIMESTAMP`), missing precompiles (no `ecrecover` in validation), gateway relay and liveness (halt, transactions relayed an hour late or dropped, dropped-then-mined), explorer memory.
+**Demo:** <https://framegas-demo.netlify.app> (Replay mode) · **Clips:** [`docs/evidence/video/`](./docs/evidence/video/README.md) · **Findings:** 30 on the devnet versus the rule texts, grouped at the top of [`docs/findings.md`](./docs/findings.md): rule caps (flat 100,000 validation gas), banned opcodes (`GAS`, `TIMESTAMP`), missing precompiles (no `ecrecover` in validation), gateway relay and liveness (halt, transactions relayed an hour late or dropped, dropped-then-mined), explorer memory.
 
 **Brand:** [`docs/brand/`](./docs/brand/)
 
@@ -218,6 +218,7 @@ Full table, rule references and repro scripts: [`docs/findings.md`](./docs/findi
 | 26 | Explorer history was lost when the gateway restarted |
 | 27 | After the reset, the same paymaster code uses about 3,150 more validation gas (48,594 vs 45,429 normal) |
 | 28 | Admitted transactions the gateway relays to the miner an hour late, or drops: of four in a row, two swaps were mined after 61–72 minutes and two were dropped |
+| 30 | The gateway's peer link to the miner was down, so admitted transactions never left it; the miner's own sidecar (`/rpc`) accepts submissions directly and is now the default node |
 | 29 | A mined transaction is first reported "Dropped, Cancelled" with a nonce-mismatch reason, 0.75 s before inclusion |
 | — | [Griefing economics](./docs/findings.md#griefing-economics): at 5e13 liquidity, moving the price 480 ticks costs 0.35 fgUSD in fees against a 1.11 fgUSD loss; unprofitable from about 7e14 (≈4 ETH depth) |
 | — | [First-ever tick crossing](./docs/findings.md#gas-by-ticks-crossed): needs 195,840 state gas; at the 0 floor, settlement failed and the paymaster lost 0.000466 ETH |
@@ -226,7 +227,7 @@ Full table, rule references and repro scripts: [`docs/findings.md`](./docs/findi
 
 ## Limitations
 
-- **Devnet only.** EIP-8141 is not on mainnet until Hegotá. The devnet has halted, been reset, and relayed admitted transactions to its miner an hour late or not at all ([finding 28](./docs/findings.md#rule-drift)); the demo shows such a transaction as stuck at the gateway instead of waiting.
+- **Devnet only.** EIP-8141 is not on mainnet until Hegotá. The devnet has halted, been reset, and its public gateway has held admitted transactions for an hour or dropped them when its peer link to the miner was down ([findings 28 and 30](./docs/findings.md#rule-drift)); the SDK and the demo therefore submit to the miner's own sidecar by default, and show a transaction stuck at the gateway as such instead of waiting.
 - **Locked stake.** The paymaster has no owner, so nothing can call `unlockStake`. A new token needs a new deployment and new stake.
 - **Max-uint permit deadline.** Validation cannot read `TIMESTAMP`, so it only accepts permits with `deadline = type(uint256).max`. The permit's value and nonce bound it. Tokens without EIP-2612 use bootstrap mode; Permit2 is not built.
 - **Eviction.** A swap that moves the tick past `maxDeviation` (1,000 ticks), or the quote past a user's cap, evicts pending transactions that read that slot.

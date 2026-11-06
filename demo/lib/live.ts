@@ -25,7 +25,7 @@ async function admissionChecks(chain: Chain, hash: string): Promise<{ passed: nu
 
 function fail(e: unknown): { ok: false; status: number; error: LiveError } {
   if (e instanceof FrameGasError) {
-    const status = e.code === "NOT_MINED" ? 504 : e.code === "REJECTED" ? 502 : 422;
+    const status = e.code === "NOT_MINED" ? 504 : e.code === "REJECTED" ? 502 : e.code === "ALREADY_PENDING" ? 409 : 422;
     const details = e.details as { requiredTokens?: bigint; hash?: string; explorerUrl?: string } | undefined;
     const required = details?.requiredTokens;
     return {

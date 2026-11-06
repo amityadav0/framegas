@@ -1,8 +1,10 @@
+import { DEFAULT_NODE_URL } from "@framegas/sdk";
 import fs from "node:fs";
 import path from "node:path";
 import type { Address } from "viem";
 
-export const GATEWAY = process.env.FRAMEGAS_GATEWAY ?? "https://altmempoolgateway.forshtat.com/rpc";
+/** The alt-mempool node live mode submits to. The miner's own sidecar by default; see `DEFAULT_NODE_URL` in the SDK. */
+export const GATEWAY = process.env.FRAMEGAS_GATEWAY ?? DEFAULT_NODE_URL;
 
 export interface DeployedToken {
   symbol: string;
