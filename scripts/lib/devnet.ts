@@ -58,7 +58,7 @@ export function devnetKey(name: string): Hex {
 
 export const addressOf = (key: Hex): Address => privateKeyToAccount(key).address;
 
-export async function waitMined(hash: Hex, timeoutMs = 180_000): Promise<any> {
+export async function waitMined(hash: Hex, timeoutMs = 600_000): Promise<any> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const receipt = await rpc("eth_getTransactionReceipt", [hash]);
