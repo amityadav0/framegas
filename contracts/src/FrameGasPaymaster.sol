@@ -134,13 +134,38 @@ contract FrameGasPaymaster is HegotaSupport(Devnet.ERC8421_WORKSHOP), IUnlockCal
     uint24 private immutable FEE;
     int24 private immutable TICK_SPACING;
 
+    /// @notice Blocks per quota epoch, about a day at 12-second blocks.
+    uint256 public constant EPOCH_BLOCKS = 7_200;
+
     /// @notice The tick validation measures manipulation against.
     int24 public refTick;
     /// @notice The block `refTick` last moved in.
     uint64 public lastSyncBlock;
+    /// @notice The quota epoch. Validation cannot read the time or the block number, so execution frames advance this
+    /// counter and validation reads it. It shares a slot with `refTick`, which validation already loads.
+    uint32 public epoch;
+    /// @notice The first block of `epoch`.
+    uint64 public epochStartBlock;
+
+    /// @notice A user's opt-in spending limit per epoch, in token base units. One slot.
+    /// @param limit 0 means no quota.
+    /// @param spent Tokens settlement pulled in `epoch`. Refunds are not credited back.
+    /// @param epoch The epoch `spent` belongs to. In any other epoch, spent counts as 0.
+    struct Quota {
+        uint96 limit;
+        uint96 spent;
+        uint32 epoch;
+    }
+
+    /// @notice Each user's quota.
+    mapping(address => Quota) public quotas;
 
     /// @notice Emitted when `refTick` moves.
     event ReferenceSynced(int24 refTick, int24 poolTick);
+    /// @notice Emitted when the quota epoch advances.
+    event EpochRolled(uint32 epoch, uint64 startBlock);
+    /// @notice Emitted when a user sets a quota. `spent` includes any increase pre-charged for the current epoch.
+    event QuotaSet(address indexed user, uint256 limit, uint256 spent, uint32 epoch);
     /// @notice Emitted when a user pays for a transaction's maximum gas cost.
     event Settled(address indexed user, uint256 tokensPaid, uint256 ethBought);
     /// @notice Emitted when a user gets back the estimated unused part.
@@ -194,6 +219,10 @@ contract FrameGasPaymaster is HegotaSupport(Devnet.ERC8421_WORKSHOP), IUnlockCal
     error RefundAboveCap(uint256 tokens, uint256 maxTokenCost);
     /// @dev The refund frame used more than `REFUND_GAS_ESTIMATE`, so the paymaster could end short.
     error RefundGasExceeded(uint256 used, uint256 estimate);
+    /// @dev The user's quota for this epoch does not cover the cap.
+    error QuotaExceeded(uint256 spent, uint256 maxTokenCost, uint256 limit);
+    /// @dev A quota must fit in 96 bits.
+    error QuotaTooLarge();
 
     /// @param config The deployment parameters.
     constructor(Config memory config) payable {
@@ -228,6 +257,7 @@ contract FrameGasPaymaster is HegotaSupport(Devnet.ERC8421_WORKSHOP), IUnlockCal
         REFUND_GAS_ESTIMATE = config.refundGasEstimate;
         refTick = tick;
         lastSyncBlock = uint64(block.number);
+        epochStartBlock = uint64(block.number);
 
         if (config.stakeAmount != 0) config.registry.addStake{value: config.stakeAmount}(config.unstakeDelaySec);
     }
@@ -263,6 +293,8 @@ contract FrameGasPaymaster is HegotaSupport(Devnet.ERC8421_WORKSHOP), IUnlockCal
         address sender = address(uint160(txparam(TxParam.SENDER)));
         uint256 balance = PAY_TOKEN.balanceOf(sender);
         if (balance < maxTokenCost) revert InsufficientBalance(balance, maxTokenCost);
+        // Before the mode branch, so every mode is held to it.
+        _requireQuota(sender, maxTokenCost);
 
         if (bootstrap) {
             if (v != 0) revert PermitWithBootstrap();
@@ -290,8 +322,47 @@ contract FrameGasPaymaster is HegotaSupport(Devnet.ERC8421_WORKSHOP), IUnlockCal
             try IERC20Permit(address(PAY_TOKEN)).permit(user, address(this), maxTokenCost, PERMIT_DEADLINE, v, r, s) {}
                 catch {}
         }
+        _rollEpoch();
         POOL_MANAGER.unlock(abi.encode(Action.Settle, user, txparam(TxParam.MAX_COST), maxTokenCost));
         _advanceReference();
+    }
+
+    /// @notice Sets the caller's spending limit per epoch, in token base units. 0 removes it. No quota is the default.
+    /// @dev A user with no ETH calls this as one of the user calls in a FrameGas transaction, bootstrap mode included.
+    /// Lowering applies at once. Raising or removing applies from the next epoch: the increase is pre-charged to this
+    /// epoch's `spent`, so what remains today is unchanged, and a leaked key cannot raise today's limit.
+    /// @param amount The new limit, or 0 for none.
+    function setQuota(uint256 amount) external {
+        if (amount > type(uint96).max) revert QuotaTooLarge();
+        _rollEpoch();
+        Quota memory q = quotas[msg.sender];
+        uint32 e = epoch;
+        uint256 spent = q.epoch == e ? q.spent : 0;
+        uint256 limit = amount == 0 ? type(uint96).max : amount;
+        if (q.limit == 0) {
+            if (amount == 0) return;
+            spent = 0;
+        } else if (limit > q.limit) {
+            spent += limit - q.limit;
+            if (spent > type(uint96).max) spent = type(uint96).max;
+        }
+        quotas[msg.sender] = Quota(uint96(limit), uint96(spent), e);
+        emit QuotaSet(msg.sender, limit, spent, e);
+    }
+
+    /// @notice Advances the quota epoch when its block range has passed. Anyone may call it. Settlement calls it too.
+    /// @dev A user whose quota is used up cannot get a transaction validated, so cannot advance the epoch themselves.
+    function rollEpoch() external {
+        _rollEpoch();
+    }
+
+    /// @notice What validation sees for `user` right now: the limit, what counts as spent, and what remains.
+    /// @dev Reads the stored epoch, as validation does, so it can lag the block number until something rolls it.
+    function quotaOf(address user) external view returns (uint256 limit, uint256 spent, uint256 remaining) {
+        Quota memory q = quotas[user];
+        if (q.limit == 0) return (0, 0, type(uint256).max);
+        spent = q.epoch == epoch ? q.spent : 0;
+        return (q.limit, spent, q.limit > spent ? q.limit - spent : 0);
     }
 
     /// @notice The last frame calls this: sells the estimated unused ETH back to the user for tokens.
@@ -434,7 +505,38 @@ contract FrameGasPaymaster is HegotaSupport(Devnet.ERC8421_WORKSHOP), IUnlockCal
         PAY_TOKEN.safeTransferFrom(user, address(POOL_MANAGER), tokensOwed);
         POOL_MANAGER.settle();
         POOL_MANAGER.take(Currency.wrap(address(0)), address(this), ethWanted);
+        _recordSpend(user, tokensOwed);
         emit Settled(user, tokensOwed, ethWanted);
+    }
+
+    /// @dev One cold read for users without a quota. The slot is already nonzero when written, so no state gas.
+    function _recordSpend(address user, uint256 amount) private {
+        Quota memory q = quotas[user];
+        if (q.limit == 0) return;
+        uint32 e = epoch;
+        uint256 spent = (q.epoch == e ? q.spent : 0) + amount;
+        if (spent > type(uint96).max) spent = type(uint96).max;
+        quotas[user] = Quota(q.limit, uint96(spent), e);
+    }
+
+    /// @dev Validation's quota check. `tokensOwed` in settlement never exceeds the cap, so this bounds what is recorded.
+    function _requireQuota(address user, uint256 maxTokenCost) private view {
+        Quota memory q = quotas[user];
+        if (q.limit == 0) return;
+        uint256 spent = q.epoch == epoch ? q.spent : 0;
+        if (spent + maxTokenCost > q.limit) revert QuotaExceeded(spent, maxTokenCost, q.limit);
+    }
+
+    /// @dev Skips whole epochs at once, so a quiet period costs one write.
+    function _rollEpoch() private {
+        uint256 start = epochStartBlock;
+        if (block.number < start + EPOCH_BLOCKS) return;
+        uint256 n = (block.number - start) / EPOCH_BLOCKS;
+        uint32 e = epoch + uint32(n);
+        uint64 s = uint64(start + n * EPOCH_BLOCKS);
+        epoch = e;
+        epochStartBlock = s;
+        emit EpochRolled(e, s);
     }
 
     /// @dev Exact-input: sells only the surplus, so the paymaster's ETH is unaffected by the price it gets.
