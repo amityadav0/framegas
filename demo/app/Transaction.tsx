@@ -79,7 +79,7 @@ export function Transaction({ run, strip, dispatch }: { run: Run | null; strip: 
       }
     >
       <div className="px-3 pt-3">
-        <ol className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">{cells}</ol>
+        <ol className="grid grid-cols-3 sm:grid-cols-none sm:grid-flow-col sm:auto-cols-fr gap-1.5">{cells}</ol>
         <div className="flex flex-wrap items-center justify-between gap-2 mt-2.5">
           <div className="flex gap-1">
             <Button onClick={() => dispatch({ type: "prev" })} title="Previous step (←)">‹</Button>

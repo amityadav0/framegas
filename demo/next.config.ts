@@ -16,7 +16,7 @@ const config: NextConfig = {
     return webpackConfig;
   },
   outputFileTracingRoot: repoRoot,
-  outputFileTracingIncludes: { "/**": ["../docs/evidence/**", "../deployments/devnet.json"] },
+  outputFileTracingIncludes: { "/**": ["../docs/evidence/*.json", "../deployments/devnet.json"] },
 };
 
 export default config;
