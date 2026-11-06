@@ -1,7 +1,7 @@
 {
   "label": "SDK live, bootstrap, 2026-11-06 redeploy",
   "txHash": "0x45fcd889938d04890cedf379a8bd83e3e34b818a71ac7975b65c742eaa4e1dd3",
-  "explorer": "https://explorer.altmempool.wtf/tx/0x45fcd889938d04890cedf379a8bd83e3e34b818a71ac7975b65c742eaa4e1dd3",
+  "explorer": "https://explorer.altmempool.wtf/tx/0x45fcd889938d04890cedf379a8bd83e3e34b818a71ac7975b65c742eaa4e1dd3?node=https%3A%2F%2Faltmempool.forshtat.com%2Frpc",
   "canonicalMempool": {
     "admitted": false,
     "message": "Invalid params: Frame transaction validation-prefix simulation failed: StorageReadNonSender"

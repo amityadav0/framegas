@@ -34,7 +34,7 @@ function PendingPill({ pending, now }: { pending: Pending; now: number }) {
   const bad = pending.state !== "relayed";
   return (
     <a
-      href={`https://explorer.altmempool.wtf/tx/${pending.hash}`}
+      href={`https://explorer.altmempool.wtf/tx/${pending.hash}?node=${encodeURIComponent("https://altmempool.forshtat.com/rpc")}`}
       target="_blank"
       rel="noreferrer"
       title={`${pending.hash}: the alt-mempool gateway admitted it; only the miner builds blocks`}

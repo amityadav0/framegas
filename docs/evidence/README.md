@@ -12,8 +12,8 @@ Deployed by `scripts/redeploy.sh --fresh --seed-eth 0.3` on the chain reset on 2
 
 | Mode | Transaction | Block | Admission | Canonical mempool | Paid / refunded (fgUSD) |
 | --- | --- | --- | --- | --- | --- |
-| Bootstrap | [`0x45fc…1dd3`](https://explorer.altmempool.wtf/tx/0x45fcd889938d04890cedf379a8bd83e3e34b818a71ac7975b65c742eaa4e1dd3) | 1213 | 24 / 24 | Rejected: `StorageReadNonSender` | 2.643216 / 0.310746 |
-| Normal | [`0x08c4…b6b7`](https://explorer.altmempool.wtf/tx/0x08c4836702188f61108cb21f7e0067ef07f2a47e7bc123ceda62cdcf1835b6b7) | 1221 | 24 / 24 | Rejected: `StorageReadNonSender` | 1.581221 / 0.196025 |
+| Bootstrap | [`0x45fc…1dd3`](https://explorer.altmempool.wtf/tx/0x45fcd889938d04890cedf379a8bd83e3e34b818a71ac7975b65c742eaa4e1dd3?node=https%3A%2F%2Faltmempool.forshtat.com%2Frpc) | 1213 | 24 / 24 | Rejected: `StorageReadNonSender` | 2.643216 / 0.310746 |
+| Normal | [`0x08c4…b6b7`](https://explorer.altmempool.wtf/tx/0x08c4836702188f61108cb21f7e0067ef07f2a47e7bc123ceda62cdcf1835b6b7?node=https%3A%2F%2Faltmempool.forshtat.com%2Frpc) | 1221 | 24 / 24 | Rejected: `StorageReadNonSender` | 1.581221 / 0.196025 |
 
 Files: `sdk-live-<mode>-<hash>.json` (admission report, receipt, canonical answer), `-summary.jpg` and `-frames.jpg` (explorer), and [`sdk-live.json`](./sdk-live.json) (the script's output). Every frame succeeded in both.
 
@@ -31,7 +31,7 @@ The bootstrap transaction's explorer page shows a "Revert reason: revalidation f
 
 The first-ever tick crossing case was skipped: its thin-pool paymaster from `scripts/07-thin-pool.ts` does not exist on the reset chain.
 
-Smoke tests from the redeploy, same deployment: [`0x7d59…c4ec`](https://explorer.altmempool.wtf/tx/0x7d597a50b7731a50bdf497196bbacc0b4b049e09339048a4ab5a78ae6ce9c4ec) (bootstrap, 3.104546 fgUSD net) and [`0xf46c…87c8`](https://explorer.altmempool.wtf/tx/0xf46c46ce7784c714c09e92e86b39593e67098564da2c15085da84160967587c8) (normal, 1.285609 fgUSD net).
+Smoke tests from the redeploy, same deployment: [`0x7d59…c4ec`](https://explorer.altmempool.wtf/tx/0x7d597a50b7731a50bdf497196bbacc0b4b049e09339048a4ab5a78ae6ce9c4ec?node=https%3A%2F%2Faltmempool.forshtat.com%2Frpc) (bootstrap, 3.104546 fgUSD net) and [`0xf46c…87c8`](https://explorer.altmempool.wtf/tx/0xf46c46ce7784c714c09e92e86b39593e67098564da2c15085da84160967587c8?node=https%3A%2F%2Faltmempool.forshtat.com%2Frpc) (normal, 1.285609 fgUSD net).
 
 ### Video and clips
 

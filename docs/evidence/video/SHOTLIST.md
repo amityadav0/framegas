@@ -6,7 +6,7 @@ Recorded from the demo in Replay mode (light theme, 1440×760 window) and a term
 
 - `pnpm --filter @framegas/demo build && pnpm --filter @framegas/demo start`, open <http://localhost:3000>, Replay selected, theme Light. The status pill shows the current block if the gateway is up; Replay does not need it.
 - Tx 1 (bootstrap, 2026-11-06) selected and reset to `1/10 · Signed, not sent`.
-- A second tab on <https://explorer.altmempool.wtf/tx/0x08c4836702188f61108cb21f7e0067ef07f2a47e7bc123ceda62cdcf1835b6b7>.
+- A second tab on <https://explorer.altmempool.wtf/tx/0x08c4836702188f61108cb21f7e0067ef07f2a47e7bc123ceda62cdcf1835b6b7?node=https%3A%2F%2Faltmempool.forshtat.com%2Frpc>.
 - A terminal at the repo root, font large enough to read at 1080p, with `docs/evidence/sdk-live-output.txt` ready to `cat`.
 - `docs/findings.md` open at the top, rendered (GitHub or a Markdown preview).
 

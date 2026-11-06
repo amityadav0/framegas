@@ -22,7 +22,7 @@ Workshop steps 1 to 10 all reached their expected outcome on the first run. The 
 | Canonical mempool, step 6 | Rejected: `Frame transaction validation-prefix simulation failed: StorageReadNonSender` |
 | Alt-mempool, unstaked, step 6 | Rejected: `unstaked payer accessed 0xd25a…0b7b slot 0x0` |
 | Alt-mempool, staked, step 8 | Admitted, 17 of 17 checks passed, mined in block 402611 |
-| Link | <https://explorer.altmempool.wtf/tx/0xc0eacb0ce4278f607223364589393c7cf1d6f0d9f56a9afa19854c44076ce7a5> |
+| Link | <https://explorer.altmempool.wtf/tx/0xc0eacb0ce4278f607223364589393c7cf1d6f0d9f56a9afa19854c44076ce7a5?node=https%3A%2F%2Faltmempool.forshtat.com%2Frpc> |
 
 Explorer history is held in memory and is cleared when the node restarts, so this link may stop resolving after a devnet reset. The block itself is the durable record.
 
@@ -69,7 +69,7 @@ Explorer history is held in memory and is cleared when the node restarts, so thi
 
 ## A staked contract paymaster reading PoolManager storage
 
-Admitted and mined: <https://explorer.altmempool.wtf/tx/0xcafcd1666aec43cb979c8dcdf1ecc9d1eb52bfd359063b778a40f27c118206af> (block 402821, 24 of 24 checks passed).
+Admitted and mined: <https://explorer.altmempool.wtf/tx/0xcafcd1666aec43cb979c8dcdf1ecc9d1eb52bfd359063b778a40f27c118206af?node=https%3A%2F%2Faltmempool.forshtat.com%2Frpc> (block 402821, 24 of 24 checks passed).
 
 The sender and the payer are separate accounts: an EOA holding 0 wei, and `FrameGasPaymaster` at `0x7503ed4e90b0cab850412fd8bf318b8e269f9996`, which staked 0.012 ETH from its own constructor. The registry accepts a contract staker, and the explorer reports `isStaked: true`.
 
@@ -89,13 +89,13 @@ Sender frame limit 30,000, plus 2,800 signature cost, from a staked paymaster:
 
 | Paymaster limit | Sum | Result |
 | --- | --- | --- |
-| 67,200 | 100,000 | [Admitted](https://explorer.altmempool.wtf/tx/0x8bb7522dc80d23614456e4355c1f8b38f936bec78889afb2bd17a5fe42e8c1b0) |
+| 67,200 | 100,000 | [Admitted](https://explorer.altmempool.wtf/tx/0x8bb7522dc80d23614456e4355c1f8b38f936bec78889afb2bd17a5fe42e8c1b0?node=https%3A%2F%2Faltmempool.forshtat.com%2Frpc) |
 | 67,201 | 100,001 | Rejected: `exceeds MAX_VERIFY_GAS 100000` |
 | 300,000 (allowed by ERC-8421's staked budget) | 332,800 | Rejected: `exceeds MAX_VERIFY_GAS 100000` |
 
 ## Declared and used validation gas
 
-Minimum limits were found by binary search in simulation. The contract wallet's minimums were then [admitted and mined](https://explorer.altmempool.wtf/tx/0x36761a0bca5f09c9c5a9a2e7295f4ea56969f019712d2ebb7f4cb33e9a41f25a) with no margin, so the used gas equals the minimum limit.
+Minimum limits were found by binary search in simulation. The contract wallet's minimums were then [admitted and mined](https://explorer.altmempool.wtf/tx/0x36761a0bca5f09c9c5a9a2e7295f4ea56969f019712d2ebb7f4cb33e9a41f25a?node=https%3A%2F%2Faltmempool.forshtat.com%2Frpc) with no margin, so the used gas equals the minimum limit.
 
 | Sender | Sender frame | Paymaster frame | Signature | Total | Room under the cap |
 | --- | --- | --- | --- | --- | --- |
@@ -120,7 +120,7 @@ Bootstrap needs no relayer, no precompile and no ETH. Validation requires the fr
 
 The same user, holding zero ETH throughout, at 2 gwei:
 
-| Frame | [Bootstrap](https://explorer.altmempool.wtf/tx/0x08a9d9386e14a428a3ba77a01719eec9be6f1fe7731608efa9d7140f974b9bf7) gas | [Normal](https://explorer.altmempool.wtf/tx/0xbd24f1a8c1aaa9fe667e5640de154c922ef18e55346808915b14fd0feb3b88e7) gas |
+| Frame | [Bootstrap](https://explorer.altmempool.wtf/tx/0x08a9d9386e14a428a3ba77a01719eec9be6f1fe7731608efa9d7140f974b9bf7?node=https%3A%2F%2Faltmempool.forshtat.com%2Frpc) gas | [Normal](https://explorer.altmempool.wtf/tx/0xbd24f1a8c1aaa9fe667e5640de154c922ef18e55346808915b14fd0feb3b88e7?node=https%3A%2F%2Faltmempool.forshtat.com%2Frpc) gas |
 | --- | --- | --- |
 | Sender `VERIFY` | 100 | 100 |
 | Paymaster `validate` | 49,835 | 45,429 |
@@ -180,9 +180,9 @@ These were mined, and the paymaster ended ahead in each:
 
 | Scenario | Frame statuses | User paid (cap 5 fgUSD) | Paymaster |
 | --- | --- | --- | --- |
-| [User call reverts](https://explorer.altmempool.wtf/tx/0x2e5c80a9f56126cbd2ff89f3b527cda6631c63b77f2950d287f8ad755fd978f3) | 1 1 1 0 1 | 1.316 fgUSD | +0.000022 ETH |
-| [Refund runs out of gas](https://explorer.altmempool.wtf/tx/0xe97e271cb40c1f70f86fd7ef57dff92d9f8642be9d494db357ad0a438e98fba4) | 1 1 1 1 0 | 1.529 fgUSD | +0.000169 ETH |
-| [No refund frame](https://explorer.altmempool.wtf/tx/0x1c9ca78b3072dd3d14cc053f7a577817bd1802d323221d8d45d56a376f4ea9a4) | 1 1 1 1 | 1.380 fgUSD | +0.000169 ETH |
+| [User call reverts](https://explorer.altmempool.wtf/tx/0x2e5c80a9f56126cbd2ff89f3b527cda6631c63b77f2950d287f8ad755fd978f3?node=https%3A%2F%2Faltmempool.forshtat.com%2Frpc) | 1 1 1 0 1 | 1.316 fgUSD | +0.000022 ETH |
+| [Refund runs out of gas](https://explorer.altmempool.wtf/tx/0xe97e271cb40c1f70f86fd7ef57dff92d9f8642be9d494db357ad0a438e98fba4?node=https%3A%2F%2Faltmempool.forshtat.com%2Frpc) | 1 1 1 1 0 | 1.529 fgUSD | +0.000169 ETH |
+| [No refund frame](https://explorer.altmempool.wtf/tx/0x1c9ca78b3072dd3d14cc053f7a577817bd1802d323221d8d45d56a376f4ea9a4?node=https%3A%2F%2Faltmempool.forshtat.com%2Frpc) | 1 1 1 1 | 1.380 fgUSD | +0.000169 ETH |
 
 Repro: `scripts/04-end-to-end.ts`, `scripts/05-griefing-proofs.ts`.
 
@@ -198,8 +198,8 @@ Settlement can fail in these ways:
 | --- | --- | --- |
 | Price moved past the buffer | The user signs a cap equal to the quote, then the price moves 480 ticks (about 4.9%) in the same block, before the transaction | Fuzz model: settlement first fails at 480 ticks |
 | Balance drained after admission | Another transaction moves the tokens first | Fuzz model |
-| [First-ever tick crossing at the floor](https://explorer.altmempool.wtf/tx/0xf07043e05acd0805b2af5dd2ed089ed61b7ea7f35d1e12732feca5dbee4b2b72) | Settlement needs new slots and declared none | Live: **user call landed free, paymaster lost 0.000466 ETH** (about 1.11 fgUSD) |
-| [Pool too thin to supply the reserve](https://explorer.altmempool.wtf/tx/0x458ed9b60820efb820ebcc0bd9d1cf8aa8a2675c23e44fbe477b3195707b7524) | The paymaster was deployed on a thin pool | Live: user call landed free, paymaster lost 0.000466 ETH |
+| [First-ever tick crossing at the floor](https://explorer.altmempool.wtf/tx/0xf07043e05acd0805b2af5dd2ed089ed61b7ea7f35d1e12732feca5dbee4b2b72?node=https%3A%2F%2Faltmempool.forshtat.com%2Frpc) | Settlement needs new slots and declared none | Live: **user call landed free, paymaster lost 0.000466 ETH** (about 1.11 fgUSD) |
+| [Pool too thin to supply the reserve](https://explorer.altmempool.wtf/tx/0x458ed9b60820efb820ebcc0bd9d1cf8aa8a2675c23e44fbe477b3195707b7524?node=https%3A%2F%2Faltmempool.forshtat.com%2Frpc) | The paymaster was deployed on a thin pool | Live: user call landed free, paymaster lost 0.000466 ETH |
 
 ### Griefing economics
 
@@ -240,7 +240,7 @@ Each tick crossed adds about 24,500 gas to settlement, and about 24,800 to a ref
 
 Absolute figures here use mocks, which are heavier than the real opcodes: a live refund uses about 74,000 gas. The increments are what carry over. Live, settlement used 116,190 gas with no crossing, about 149,000 with one, and 189,837 with three.
 
-A first-ever crossing also writes new slots: 97,920 state gas was not enough, and declaring 195,840 [succeeded](https://explorer.altmempool.wtf/tx/0x01a97bc25fd8dbc9109ee27640815e03588ec6aa14f00d3b66b1a04a2be76622). A refund that crosses a tick exceeds its estimate and reverts, so the user forfeits that refund and the paymaster is unaffected.
+A first-ever crossing also writes new slots: 97,920 state gas was not enough, and declaring 195,840 [succeeded](https://explorer.altmempool.wtf/tx/0x01a97bc25fd8dbc9109ee27640815e03588ec6aa14f00d3b66b1a04a2be76622?node=https%3A%2F%2Faltmempool.forshtat.com%2Frpc). A refund that crosses a tick exceeds its estimate and reverts, so the user forfeits that refund and the paymaster is unaffected.
 
 A swap this small moves a deep pool by a few ticks, against a tick spacing of 60, so it can cross at most one there. Crossing several needs a thin pool.
 

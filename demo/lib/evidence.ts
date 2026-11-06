@@ -153,7 +153,7 @@ export function loadComparisonRuns(dir = evidenceDir()): Run[] {
         source: "replay",
         mode,
         hash: d.txHash,
-        explorerUrl: d.explorer ?? `https://explorer.altmempool.wtf/tx/${d.txHash}`,
+        explorerUrl: minerView(d.explorer ?? `https://explorer.altmempool.wtf/tx/${d.txHash}`),
         block: Number(BigInt(receipt.blockNumber)),
         recordedAt: "2026-11-05",
         sender: getAddress(receipt.from),
@@ -191,4 +191,9 @@ export function loadComparisonRuns(dir = evidenceDir()): Run[] {
       };
     });
   return runs.sort((a, b) => (a.mode === b.mode ? 0 : a.mode === "bootstrap" ? -1 : 1));
+}
+
+/** Explorer links open the miner's view: the gateway keeps transactions only in memory and forgets them on restart. */
+export function minerView(url: string): string {
+  return /[?&]node=/.test(url) ? url : `${url}${url.includes("?") ? "&" : "?"}node=${encodeURIComponent("https://altmempool.forshtat.com/rpc")}`;
 }

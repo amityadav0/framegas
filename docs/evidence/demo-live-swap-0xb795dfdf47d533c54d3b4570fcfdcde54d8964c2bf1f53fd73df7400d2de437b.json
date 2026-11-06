@@ -1,7 +1,7 @@
 {
   "label": "Demo Live mode: Swap 5 fgUSD -> ETH through Uniswap v4 PoolSwapTest, from the demo wallet holding no ETH",
   "txHash": "0xb795dfdf47d533c54d3b4570fcfdcde54d8964c2bf1f53fd73df7400d2de437b",
-  "explorer": "https://explorer.altmempool.wtf/tx/0xb795dfdf47d533c54d3b4570fcfdcde54d8964c2bf1f53fd73df7400d2de437b",
+  "explorer": "https://explorer.altmempool.wtf/tx/0xb795dfdf47d533c54d3b4570fcfdcde54d8964c2bf1f53fd73df7400d2de437b?node=https%3A%2F%2Faltmempool.forshtat.com%2Frpc",
   "admittedAt": "2026-11-06 14:04 IST",
   "minedAt": "2026-11-06 15:16:36 IST, block 1977",
   "note": "The demo's 10-minute wait ended with NOT_MINED; the gateway relayed it to the miner about 72 minutes after admission (finding 28).",

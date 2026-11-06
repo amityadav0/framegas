@@ -170,6 +170,9 @@ export function createFrameGas(config: FrameGasConfig) {
   const sender = config.sender ?? signer.address;
   const chainId = config.chainId ?? 1337;
   const explorerUrl = (config.explorerUrl ?? "https://explorer.altmempool.wtf").replace(/\/$/, "");
+  const nodeUrl = config.gatewayUrl ?? DEFAULT_NODE_URL;
+  /** The explorer opens a transaction as the node it is given saw it. The miner's node keeps every mined transaction; the gateway forgets them on restart. */
+  const txLink = (hash: string) => `${explorerUrl}/tx/${hash}?node=${encodeURIComponent(nodeUrl)}`;
   const maxFeePerGas = config.maxFeePerGas ?? DEFAULT_MAX_FEE;
   const paymasters = new Map(Object.entries(config.paymasters).map(([token, pm]) => [getAddress(token), getAddress(pm)]));
   const cache = new Map<Address, Paymaster>();
@@ -443,7 +446,7 @@ export function createFrameGas(config: FrameGasConfig) {
     }
 
     const frameNames = ["sender verify", "paymaster validate", ...(p.mode === "bootstrap" ? ["approve"] : []), "settle", ...req.calls.map((_, i) => `call ${i}`), ...(p.limits.refund ? ["refund"] : [])];
-    return { mode: p.mode, hash, explorerUrl: `${explorerUrl}/tx/${hash}`, canonicalMempool, paymaster: p.paymaster.address, frameNames, frameLimits: p.frameLimits, maxCostWei: p.simulated.maxCost, limits: p.limits, warnings: p.warnings };
+    return { mode: p.mode, hash, explorerUrl: txLink(hash), canonicalMempool, paymaster: p.paymaster.address, frameNames, frameLimits: p.frameLimits, maxCostWei: p.simulated.maxCost, limits: p.limits, warnings: p.warnings };
   }
 
   /**
@@ -471,7 +474,7 @@ export function createFrameGas(config: FrameGasConfig) {
       const receipt = await chain.rpc("eth_getTransactionReceipt", [hash]);
       if (receipt) return receipt;
       if (Date.now() >= deadline) {
-        throw new FrameGasError("NOT_MINED", `${hash} was admitted but not mined in time. It may still be mined`, { hash, explorerUrl: `${explorerUrl}/tx/${hash}` });
+        throw new FrameGasError("NOT_MINED", `${hash} was admitted but not mined in time. It may still be mined`, { hash, explorerUrl: txLink(hash) });
       }
       await new Promise((resolve) => setTimeout(resolve, config.chain ? 0 : 2_000));
     }

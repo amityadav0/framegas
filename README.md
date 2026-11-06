@@ -118,7 +118,7 @@ All in [`contracts/src/FrameGasPaymaster.sol`](./contracts/src/FrameGasPaymaster
 
 Measured on the current deployment on 2026-11-06 at 2 gwei by `scripts/08-sdk-live.ts`: one user's first and second transaction, each with two `transfer` calls (the second to an address that held none, so it writes a new balance slot in the first transaction). Limit is what the signed transaction declared.
 
-**Bootstrap:** [`0x45fc…1dd3`](https://explorer.altmempool.wtf/tx/0x45fcd889938d04890cedf379a8bd83e3e34b818a71ac7975b65c742eaa4e1dd3), block 1213
+**Bootstrap:** [`0x45fc…1dd3`](https://explorer.altmempool.wtf/tx/0x45fcd889938d04890cedf379a8bd83e3e34b818a71ac7975b65c742eaa4e1dd3?node=https%3A%2F%2Faltmempool.forshtat.com%2Frpc), block 1213
 
 | # | Frame | Mode | Gas used / limit | State gas used / limit |
 | --- | --- | --- | --- | --- |
@@ -131,7 +131,7 @@ Measured on the current deployment on 2026-11-06 at 2 gwei by `scripts/08-sdk-li
 | 6 | `refund` | SENDER | 83,524 / 96,000 | 0 |
 | | Total | | 507,574 | fee 0.001015 ETH, user paid 2.332470 fgUSD net, paymaster +0.000025 ETH |
 
-**Normal:** [`0x08c4…b6b7`](https://explorer.altmempool.wtf/tx/0x08c4836702188f61108cb21f7e0067ef07f2a47e7bc123ceda62cdcf1835b6b7), block 1221
+**Normal:** [`0x08c4…b6b7`](https://explorer.altmempool.wtf/tx/0x08c4836702188f61108cb21f7e0067ef07f2a47e7bc123ceda62cdcf1835b6b7?node=https%3A%2F%2Faltmempool.forshtat.com%2Frpc), block 1221
 
 | # | Frame | Mode | Gas used / limit | State gas used / limit |
 | --- | --- | --- | --- | --- |
@@ -165,11 +165,11 @@ Current deployment (2026-11-06, chain reset that morning). The explorer keeps hi
 
 | What | Transaction | Files |
 | --- | --- | --- |
-| SDK end to end, bootstrap: canonical rejected, alt-mempool 24/24, mined | [`0x45fc…1dd3`](https://explorer.altmempool.wtf/tx/0x45fcd889938d04890cedf379a8bd83e3e34b818a71ac7975b65c742eaa4e1dd3), block 1213 | `docs/evidence/sdk-live-bootstrap-0x45fc…{.json,-summary.jpg,-frames.jpg}` |
-| SDK end to end, normal: canonical rejected, alt-mempool 24/24, mined | [`0x08c4…b6b7`](https://explorer.altmempool.wtf/tx/0x08c4836702188f61108cb21f7e0067ef07f2a47e7bc123ceda62cdcf1835b6b7), block 1221 | `docs/evidence/sdk-live-normal-0x08c4…{.json,-summary.jpg,-frames.jpg}` |
-| Demo Live mode: 5 fgUSD → ETH swap on Uniswap v4 from a zero-ETH wallet, 7/7 frames, mined 72 min after admission | [`0xb795…437b`](https://explorer.altmempool.wtf/tx/0xb795dfdf47d533c54d3b4570fcfdcde54d8964c2bf1f53fd73df7400d2de437b), block 1977 | `docs/evidence/demo-live-swap-0xb795….json` |
-| Quota: opt-in inside a bootstrap transaction | [`0xb3e5…b7f7`](https://explorer.altmempool.wtf/tx/0xb3e53ed4816645021f579fe68605982015573466b5a1bc5f43f612a9ca86b7f7), block 1026 | `docs/evidence/quota-live.json` |
-| Quota: normal transaction under a 10 fgUSD quota | [`0x83a3…1e46`](https://explorer.altmempool.wtf/tx/0x83a3f639c235f97b94bf729a01d868a0c97feb7cc50c1d7bb8674cb3847a1e46), block 1038 | `docs/evidence/quota-live.json` |
+| SDK end to end, bootstrap: canonical rejected, alt-mempool 24/24, mined | [`0x45fc…1dd3`](https://explorer.altmempool.wtf/tx/0x45fcd889938d04890cedf379a8bd83e3e34b818a71ac7975b65c742eaa4e1dd3?node=https%3A%2F%2Faltmempool.forshtat.com%2Frpc), block 1213 | `docs/evidence/sdk-live-bootstrap-0x45fc…{.json,-summary.jpg,-frames.jpg}` |
+| SDK end to end, normal: canonical rejected, alt-mempool 24/24, mined | [`0x08c4…b6b7`](https://explorer.altmempool.wtf/tx/0x08c4836702188f61108cb21f7e0067ef07f2a47e7bc123ceda62cdcf1835b6b7?node=https%3A%2F%2Faltmempool.forshtat.com%2Frpc), block 1221 | `docs/evidence/sdk-live-normal-0x08c4…{.json,-summary.jpg,-frames.jpg}` |
+| Demo Live mode: 5 fgUSD → ETH swap on Uniswap v4 from a zero-ETH wallet, 7/7 frames, mined 72 min after admission | [`0xb795…437b`](https://explorer.altmempool.wtf/tx/0xb795dfdf47d533c54d3b4570fcfdcde54d8964c2bf1f53fd73df7400d2de437b?node=https%3A%2F%2Faltmempool.forshtat.com%2Frpc), block 1977 | `docs/evidence/demo-live-swap-0xb795….json` |
+| Quota: opt-in inside a bootstrap transaction | [`0xb3e5…b7f7`](https://explorer.altmempool.wtf/tx/0xb3e53ed4816645021f579fe68605982015573466b5a1bc5f43f612a9ca86b7f7?node=https%3A%2F%2Faltmempool.forshtat.com%2Frpc), block 1026 | `docs/evidence/quota-live.json` |
+| Quota: normal transaction under a 10 fgUSD quota | [`0x83a3…1e46`](https://explorer.altmempool.wtf/tx/0x83a3f639c235f97b94bf729a01d868a0c97feb7cc50c1d7bb8674cb3847a1e46?node=https%3A%2F%2Faltmempool.forshtat.com%2Frpc), block 1038 | `docs/evidence/quota-live.json` |
 | Demo clip (Replay, 89 s) and terminal clip of the `08-sdk-live.ts` output (30 s) | | [`docs/evidence/video/`](./docs/evidence/video/README.md) |
 | Demo screenshots, both themes | | [`docs/evidence/demo/`](./docs/evidence/demo/) |
 | CRE simulation: default, alert and gateway-down runs | | [`cre/simulation.log`](./cre/simulation.log) |
