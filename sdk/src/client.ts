@@ -1,7 +1,7 @@
 import { getProfile } from "@forshtat/hegota-support/profiles";
 import { toWire } from "@forshtat/hegota-support/rpc";
 import * as frameTx from "@forshtat/hegota-support/tx";
-import { decodeEventLog, encodeFunctionData, getAddress, zeroHash, type Abi, type Address, type Hex } from "viem";
+import { decodeEventLog, encodeFunctionData, getAddress, toFunctionSelector, zeroHash, type Abi, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { erc20Abi, paymasterAbi } from "./abi.js";
 import { httpChain, type Chain, type RawSimulation } from "./chain.js";
@@ -10,9 +10,12 @@ import { deriveLimits, type FrameLimit, type Limits, type Simulated } from "./li
 
 const profile = getProfile("ethrex-eip8141-tracer");
 
-/** Measured on the devnet, with room to spare. Validation does not vary much, and running short only fails admission. */
-const VALIDATE_LIMIT = 49_000n;
-const VALIDATE_BOOTSTRAP_LIMIT = 54_000n;
+/**
+ * Measured on the devnet on 2026-11-06 with a quota active: 51,938 normal, 56,658 bootstrap. About 6% headroom.
+ * Validation does not vary much, and running short only fails admission. The whole prefix must stay under 100,000.
+ */
+const VALIDATE_LIMIT = 55_000n;
+const VALIDATE_BOOTSTRAP_LIMIT = 60_000n;
 const EOA_VERIFY_LIMIT = 200n;
 const WALLET_VERIFY_LIMIT = 12_000n;
 const DEFAULT_MAX_FEE = 2_000_000_000n;
@@ -61,6 +64,22 @@ export interface SendRequest extends QuoteRequest {
 }
 
 export type Mode = "bootstrap" | "normal";
+
+/** A user's opt-in spending quota on a paymaster, as validation sees it now. */
+export interface QuotaStatus {
+  /** False when the user has set no quota, or the paymaster predates quotas. */
+  active: boolean;
+  /** Tokens per epoch, in base units. `type(uint96).max` once removed, until the next epoch. */
+  limit: bigint;
+  spent: bigint;
+  /** What the next `maxTokenCost` may be at most. Unbounded when inactive. */
+  remaining: bigint;
+  epoch: number;
+  /** The first block at which the epoch can roll. Validation keeps using the old one until something rolls it. */
+  resetsAtBlock: bigint;
+}
+
+const UNBOUNDED = 2n ** 256n - 1n;
 
 export interface Quote {
   mode: Mode;
@@ -118,6 +137,7 @@ interface Plan {
 }
 
 const ok = (status: string | undefined): boolean => status === "0x1";
+const quotaSelector = toFunctionSelector("QuotaExceeded(uint256,uint256,uint256)").slice(2);
 
 export function createFrameGas(config: FrameGasConfig) {
   const chain =
@@ -236,12 +256,22 @@ export function createFrameGas(config: FrameGasConfig) {
   async function plan(req: QuoteRequest, cap: bigint | undefined, approveAmount: bigint | undefined): Promise<Plan & { build: (limits: Limits, finalCap: bigint, finalApprove: bigint) => ReturnType<typeof build> }> {
     checkCalls(req.calls);
     const paymaster = await paymasterFor(req.payToken);
-    const [balance, allowance, nonceHex, code] = await Promise.all([
+    const [balance, allowance, nonceHex, code, quota] = await Promise.all([
       read<bigint>(req.payToken, erc20Abi, "balanceOf", [sender]),
       read<bigint>(req.payToken, erc20Abi, "allowance", [sender, paymaster.address]),
       chain.rpc("eth_getTransactionCount", [sender, "latest"]),
       chain.rpc("eth_getCode", [sender, "latest"]),
+      quotaFor(paymaster.address, sender),
     ]);
+    const overQuota = (needed: bigint) =>
+      new FrameGasError("QUOTA_EXCEEDED", `the sender's quota leaves ${quota.remaining} this epoch, below ${needed}. It resets from block ${quota.resetsAtBlock}`, {
+        remaining: quota.remaining,
+        limit: quota.limit,
+        resetsAtBlock: quota.resetsAtBlock,
+        needed,
+      });
+    if (cap !== undefined && cap > quota.remaining) throw overQuota(cap);
+    if (quota.remaining === 0n) throw overQuota(1n);
     if (cap !== undefined && balance < cap) {
       throw new FrameGasError("INSUFFICIENT_BALANCE", `the sender holds ${balance} of the token, below the ${cap} cap`, { balance, maxTokenCost: cap });
     }
@@ -249,9 +279,12 @@ export function createFrameGas(config: FrameGasConfig) {
 
     // An allowance covering the cap needs no approve frame. Without a cap, any allowance short of the balance is judged
     // against what the transaction turns out to need, below.
-    const wanted = cap ?? balance;
+    const most = balance < quota.remaining ? balance : quota.remaining;
+    const wanted = cap ?? most;
     const mode: Mode = allowance >= wanted ? "normal" : "bootstrap";
-    const probeCap = mode === "normal" ? (allowance < balance ? allowance : balance) : balance;
+    let probeCap = mode === "normal" ? (allowance < balance ? allowance : balance) : balance;
+    // Validation checks the cap against the quota too, so probing above what remains would fail for that reason alone.
+    if (probeCap > quota.remaining) probeCap = quota.remaining;
     const probeApprove = approveAmount && approveAmount > probeCap ? approveAmount : probeCap;
 
     const senderLimit = code === "0x" ? EOA_VERIFY_LIMIT : WALLET_VERIFY_LIMIT;
@@ -273,6 +306,7 @@ export function createFrameGas(config: FrameGasConfig) {
     );
 
     if (!outcome.ok) {
+      if (outcome.reason === "VALIDATION" && quota.active && String(outcome.error).includes(quotaSelector)) throw overQuota(probeCap);
       if (outcome.reason === "VALIDATION") {
         throw new FrameGasError("VALIDATION_FAILED", `the paymaster would refuse this transaction: ${outcome.error}`, { error: outcome.error });
       }
@@ -283,6 +317,7 @@ export function createFrameGas(config: FrameGasConfig) {
     }
 
     const requiredTokens = await read<bigint>(paymaster.address, paymasterAbi, "quote", [outcome.simulated.maxCost]);
+    if (requiredTokens > quota.remaining) throw overQuota(requiredTokens);
     const l = outcome.limits;
     const frameLimits: FrameLimit[] = [
       { execution: senderLimit, state: 0n },
@@ -303,6 +338,33 @@ export function createFrameGas(config: FrameGasConfig) {
       read<bigint>(payToken, erc20Abi, "allowance", [sender, paymaster.address]),
     ]);
     return { sender, paymaster: paymaster.address, balance, allowance };
+  }
+
+  /** What `user` (the sender by default) may still spend this epoch through the token's paymaster. */
+  async function quoteRemaining(user: Address = sender, payToken?: Address): Promise<QuotaStatus> {
+    const token = payToken ?? (paymasters.size === 1 ? [...paymasters.keys()][0]! : undefined);
+    if (!token) throw new FrameGasError("UNKNOWN_TOKEN", "several paymasters are registered: pass payToken");
+    const paymaster = await paymasterFor(token);
+    return quotaFor(paymaster.address, user);
+  }
+
+  async function quotaFor(paymaster: Address, user: Address): Promise<QuotaStatus> {
+    const none: QuotaStatus = { active: false, limit: 0n, spent: 0n, remaining: UNBOUNDED, epoch: 0, resetsAtBlock: 0n };
+    let quota: readonly [bigint, bigint, bigint];
+    try {
+      quota = await read<readonly [bigint, bigint, bigint]>(paymaster, paymasterAbi, "quotaOf", [user]);
+    } catch {
+      return none; // a paymaster deployed before quotas
+    }
+    if (!Array.isArray(quota)) return none;
+    const [limit, spent, remaining] = quota;
+    if (limit === 0n) return none;
+    const [epoch, start, blocks] = await Promise.all([
+      read<number>(paymaster, paymasterAbi, "epoch"),
+      read<bigint>(paymaster, paymasterAbi, "epochStartBlock"),
+      read<bigint>(paymaster, paymasterAbi, "EPOCH_BLOCKS"),
+    ]);
+    return { active: true, limit, spent, remaining, epoch: Number(epoch), resetsAtBlock: BigInt(start) + BigInt(blocks) };
   }
 
   /** Works out what a transaction would cost, by simulating it. Nothing is sent. */
@@ -414,7 +476,7 @@ export function createFrameGas(config: FrameGasConfig) {
     };
   }
 
-  return { quote, send, account, sender };
+  return { quote, send, account, quoteRemaining, sender };
 }
 
 export type FrameGas = ReturnType<typeof createFrameGas>;

@@ -13,6 +13,12 @@ export const paymasterAbi = parseAbi([
   "function MAX_TX_COST_WEI() view returns (uint256)",
   "function REFUND_GAS_ESTIMATE() view returns (uint256)",
   "function REFUND_GAS_PER_FRAME() view returns (uint256)",
+  "function EPOCH_BLOCKS() view returns (uint256)",
+  "function epoch() view returns (uint32)",
+  "function epochStartBlock() view returns (uint64)",
+  "function quotaOf(address user) view returns (uint256 limit, uint256 spent, uint256 remaining)",
+  "function setQuota(uint256 amount)",
+  "function rollEpoch()",
   "event Settled(address indexed user, uint256 tokensPaid, uint256 ethBought)",
   "event Refunded(address indexed user, uint256 tokensReturned, uint256 ethSold)",
   "error TickDeviated(int24 poolTick, int24 refTick)",
@@ -29,6 +35,8 @@ export const paymasterAbi = parseAbi([
   "error PoolTooThin(uint128 liquidity, uint128 minLiquidity)",
   "error MaxCostTooHigh(uint256 maxCost, uint256 limit)",
   "error InvalidPermit()",
+  "error QuotaExceeded(uint256 spent, uint256 maxTokenCost, uint256 limit)",
+  "error QuotaTooLarge()",
 ]);
 
 export const erc20Abi = parseAbi([

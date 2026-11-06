@@ -5,6 +5,7 @@ export type FrameGasErrorCode =
   | "UNKNOWN_TOKEN"
   | "INSUFFICIENT_BALANCE"
   | "CAP_TOO_LOW"
+  | "QUOTA_EXCEEDED"
   | "COST_TOO_HIGH"
   | "VALUE_NOT_SUPPORTED"
   | "NO_CALLS"
