@@ -310,6 +310,9 @@ export function createFrameGas(config: FrameGasConfig) {
       if (outcome.reason === "VALIDATION") {
         throw new FrameGasError("VALIDATION_FAILED", `the paymaster would refuse this transaction: ${outcome.error}`, { error: outcome.error });
       }
+      if (outcome.reason === "COST") {
+        throw new FrameGasError("COST_TOO_HIGH", "the gas these calls need puts the transaction's maximum cost above the paymaster's per-transaction limit. Nothing was sent", { error: outcome.error });
+      }
       if (outcome.reason === "SETTLEMENT") {
         throw new FrameGasError("SETTLEMENT_WILL_FAIL", "settlement fails in simulation at every limit tried, so the pool is probably too thin. Nothing was sent", { tried: outcome.tried });
       }

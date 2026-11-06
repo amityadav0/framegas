@@ -51,6 +51,7 @@ export type DeriveOutcome =
   | { ok: true; limits: Limits; simulated: Simulated; simulations: number; warnings: string[] }
   | { ok: false; reason: "VALIDATION"; error: string }
   | { ok: false; reason: "SETTLEMENT"; tried: FrameLimit[] }
+  | { ok: false; reason: "COST"; error: string }
   | { ok: false; reason: "CALL"; callIndex: number; tried: FrameLimit[] };
 
 const copy = (l: Limits): Limits => ({ settle: { ...l.settle }, calls: l.calls.map((c) => ({ ...c })), refund: l.refund && { ...l.refund } });
@@ -80,20 +81,24 @@ export async function deriveLimits(simulate: Simulate, floors: Floors, callCount
   const settleSteps = settleLadder(floors.settle);
   const callSteps = callLadder();
   const callRung = Array.from({ length: callCount }, () => 0);
+  /** A call that has succeeded keeps what it used plus headroom, so its search limit stops counting toward the maximum cost. */
+  const settled: (FrameLimit | undefined)[] = Array.from({ length: callCount }, () => undefined);
   let settleRung = 0;
   let refund: FrameLimit | undefined = floors.refund;
   let simulations = 0;
 
-  const searching = (): Limits => ({ settle: settleSteps[settleRung]!, calls: callRung.map((r) => callSteps[r]!), refund });
+  const searching = (): Limits => ({ settle: settleSteps[settleRung]!, calls: callRung.map((r, i) => settled[i] ?? callSteps[r]!), refund });
 
   // Search upward until every frame succeeds.
   let found: Simulated | undefined;
+  let foundWith: Limits | undefined;
   while (simulations < MAX_SIMULATIONS) {
     simulations++;
-    const result = await simulate(searching());
+    const tried = searching();
+    const result = await simulate(tried);
     if (!result.frames) {
       // Searching raises the maximum cost, so a later failure means the limits needed cost more than validation allows.
-      if (simulations > 1) return { ok: false, reason: "SETTLEMENT", tried: settleSteps };
+      if (simulations > 1) return { ok: false, reason: "COST", error: result.error ?? "validation failed once the limits grew" };
       return { ok: false, reason: "VALIDATION", error: result.error ?? "the transaction would not pass validation" };
     }
 
@@ -102,6 +107,9 @@ export async function deriveLimits(simulate: Simulate, floors: Floors, callCount
       settleRung++;
       continue;
     }
+    result.frames.calls.forEach((c, i) => {
+      if (c.succeeded && !settled[i]) settled[i] = { execution: headroom(c.gasUsed), state: callSteps[callRung[i]!]!.state };
+    });
     const failedCall = result.frames.calls.findIndex((c) => !c.succeeded);
     if (failedCall >= 0) {
       if (callRung[failedCall]! + 1 >= callSteps.length) return { ok: false, reason: "CALL", callIndex: failedCall, tried: callSteps };
@@ -119,12 +127,13 @@ export async function deriveLimits(simulate: Simulate, floors: Floors, callCount
       continue;
     }
     found = result;
+    foundWith = tried;
     break;
   }
-  if (!found?.frames) return { ok: false, reason: "SETTLEMENT", tried: settleSteps };
+  if (!found?.frames || !foundWith) return { ok: false, reason: "SETTLEMENT", tried: settleSteps };
 
   // Tighten what the search over-declared. Execution gas comes down to what was used; state gas is already minimal.
-  const searched = searching();
+  const searched = foundWith;
   const tight = copy(searched);
   found.frames.calls.forEach((c, i) => {
     tight.calls[i]!.execution = headroom(c.gasUsed);

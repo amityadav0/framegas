@@ -121,4 +121,46 @@ describe("deriveLimits", () => {
     await deriveLimits(c.simulate, floors, 1);
     expect(c.seen.length).toBeLessThanOrEqual(24);
   });
+
+  /** The mock-Aave preset: an approve that needs one new slot, then a supply that needs two, under a cost cap. */
+  it("tightens a call once it succeeds, so a later call's search stays under the cost cap", async () => {
+    const cap = 700_000n;
+    const seen: Limits[] = [];
+    const simulate = async (l: Limits): Promise<Simulated> => {
+      seen.push(l);
+      const total = l.settle.execution + l.calls.reduce((a, c) => a + c.execution + c.state, 0n);
+      if (total > cap) return { maxCost: total, error: "VERIFY frame 1 failed: RevertOpcode" };
+      const needs = [{ gas: 15_000n, state: STATE_GAS_PER_SLOT }, { gas: 60_000n, state: 2n * STATE_GAS_PER_SLOT }];
+      return {
+        maxCost: total,
+        frames: {
+          settle: { succeeded: true, gasUsed: 110_000n },
+          calls: l.calls.map((c, i) => {
+            const ok = c.execution >= needs[i]!.gas && c.state >= needs[i]!.state;
+            return { succeeded: ok, gasUsed: ok ? needs[i]!.gas : c.execution };
+          }),
+          refund: { succeeded: true, gasUsed: 74_000n },
+        },
+      };
+    };
+    const out = await deriveLimits(simulate, floors, 2);
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.limits.calls[0]!.state).toBe(STATE_GAS_PER_SLOT);
+    expect(out.limits.calls[1]!.state).toBe(2n * STATE_GAS_PER_SLOT);
+    // Once the approve succeeded, it never again declared the 150,000 search limit.
+    const afterApprove = seen.findIndex((l) => l.calls[0]!.state === STATE_GAS_PER_SLOT);
+    expect(seen.slice(afterApprove + 1).every((l) => l.calls[0]!.execution < 20_000n)).toBe(true);
+  });
+
+  it("reports a cost-cap failure after the first simulation as COST, not settlement", async () => {
+    let n = 0;
+    const simulate = async (l: Limits): Promise<Simulated> => {
+      n++;
+      if (n > 1) return { maxCost: 1n, error: "VERIFY frame 1 failed: RevertOpcode" };
+      return { maxCost: 1n, frames: { settle: { succeeded: true, gasUsed: 110_000n }, calls: l.calls.map(() => ({ succeeded: false, gasUsed: 150_000n })), refund: { succeeded: true, gasUsed: 74_000n } } };
+    };
+    const out = await deriveLimits(simulate, floors, 1);
+    expect(out).toMatchObject({ ok: false, reason: "COST" });
+  });
 });
