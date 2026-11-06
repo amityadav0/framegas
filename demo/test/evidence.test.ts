@@ -1,65 +1,67 @@
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { evidenceDir, loadAdmissionReports, loadComparisonRuns } from "../lib/evidence";
-import { frameNames } from "../lib/run";
+import { evidenceDir, loadReplayRuns } from "../lib/evidence";
+import { frameKinds, units } from "../lib/run";
 
 const dir = evidenceDir(path.resolve(__dirname, "..", ".."));
 
-describe("replay data from docs/evidence", () => {
-  const runs = loadComparisonRuns(dir);
+describe("replay runs from docs/evidence", () => {
+  const runs = loadReplayRuns(dir);
+  const [first, second] = runs;
 
-  it("has a first and a second transaction, in that order", () => {
+  it("has a user's first transaction, then their second", () => {
     expect(runs.map((r) => r.mode)).toEqual(["bootstrap", "normal"]);
+    expect(first!.sender).toBe(second!.sender);
   });
 
-  it("shows the canonical mempool refusing and the alt-mempool admitting the same bytes", () => {
+  it("shows the canonical mempool refusing and the alt-mempool admitting the same signed bytes", () => {
     for (const r of runs) {
-      expect(r.canonical?.admitted).toBe(false);
-      expect(r.canonical?.message).toContain("StorageReadNonSender");
-      expect(r.alt.admitted).toBe(true);
+      expect(r.canonical).toMatchObject({ method: "eth_sendRawTransaction", admitted: false });
+      expect(r.canonical!.message).toContain("StorageReadNonSender");
+      expect(r.alt).toMatchObject({ method: "eth_sendFrameTransaction", admitted: true, checksPassed: 24, checksTotal: 24 });
+      expect(r.signed!.prefix.startsWith("0x06")).toBe(true);
     }
   });
 
-  it("reads what the user paid and got back from the paymaster's events", () => {
-    for (const r of runs) {
-      expect(Number(r.tokensPaid)).toBeGreaterThan(1);
-      expect(Number(r.tokensRefunded)).toBeGreaterThan(0);
-      expect(Number(r.netCost)).toBeLessThan(Number(r.tokensPaid));
+  it("orders the frames and pairs each with its signed limits", () => {
+    expect(first!.frames.map((f) => f.name)).toEqual(["verify", "validate", "approve", "settle", "call", "refund"]);
+    expect(second!.frames.map((f) => f.name)).toEqual(["verify", "validate", "settle", "call", "refund"]);
+    for (const f of runs.flatMap((r) => r.frames)) {
+      expect(f.success).toBe(true);
+      expect(BigInt(f.gasUsed)).toBeLessThanOrEqual(BigInt(f.gasLimit));
     }
+    expect(first!.frames[2]).toMatchObject({ stateGasUsed: "97920", stateGasLimit: "97920" });
   });
 
-  it("names every frame, with all of them successful", () => {
-    const [first, second] = runs;
-    expect(first!.frames.map((f) => f.name)).toEqual(["sender verify", "paymaster validate", "approve", "settle", "user call", "refund"]);
-    expect(second!.frames.map((f) => f.name)).toEqual(["sender verify", "paymaster validate", "settle", "user call", "refund"]);
-    expect(runs.flatMap((r) => r.frames).every((f) => f.success)).toBe(true);
+  it("keeps quote below cap, and net below what settlement bought", () => {
+    for (const r of runs) {
+      expect(Number(r.cost.quote)).toBeLessThan(Number(r.cost.cap));
+      expect(Number(r.cost.paid)).toBeLessThan(Number(r.cost.quote));
+      expect(Number(r.cost.net)).toBeCloseTo(Number(r.cost.paid) - Number(r.cost.refunded), 6);
+    }
+    expect(first!.cost).toMatchObject({ cap: "4.000000", quote: "2.353233", paid: "2.249704", refunded: "0.301500" });
+    expect(second!.cost).toMatchObject({ cap: "3.000000", quote: "1.636264" });
   });
 
-  it("charges the approve frame's new slot as state gas", () => {
-    const approve = runs[0]!.frames.find((f) => f.name === "approve");
-    expect(approve?.stateGasUsed).toBe("97920");
+  it("shows the sender with no ETH, and a balance that falls by the net cost plus the call", () => {
+    expect(first!.balances).toMatchObject({ tokenBefore: "100.000000", eth: "0.000000000" });
+    const before = Number(first!.balances.tokenBefore);
+    const after = Number(first!.balances.tokenAfter);
+    expect(before - after).toBeCloseTo(Number(first!.cost.net) + 1, 6);
+    expect(first!.call).toMatch(/^Transfer 1\.00 fgUSD to 0x8943/);
   });
 
-  it("links a screenshot for each", () => {
-    expect(runs.every((r) => r.screenshot?.endsWith("-summary.jpg"))).toBe(true);
+  it("leaves the paymaster's ETH up after each transaction", () => {
+    for (const r of runs) expect(Number(r.paymaster.delta)).toBeGreaterThan(0);
   });
 });
 
-describe("saved admission reports", () => {
-  const reports = loadAdmissionReports(dir);
-
-  it("has both, with every check passed", () => {
-    expect(reports.map((r) => r.label)).toEqual(["bootstrap", "normal"]);
-    for (const r of reports) {
-      expect(r.checks.length).toBe(24);
-      expect(r.checks.every((c) => c.passed)).toBe(true);
-      expect(r.screenshots.length).toBe(2);
-    }
+describe("helpers", () => {
+  it("names frames for several calls", () => {
+    expect(frameKinds("normal", 6)).toEqual(["verify", "validate", "settle", "call", "call", "refund"]);
   });
-});
-
-describe("frameNames", () => {
-  it("numbers several user calls", () => {
-    expect(frameNames("normal", 6)).toEqual(["sender verify", "paymaster validate", "settle", "user call 1", "user call 2", "refund"]);
+  it("formats signed amounts", () => {
+    expect(units(-1_500_000n, 6)).toBe("-1.500000");
+    expect(units(21_988_000_000_000n, 18, 9)).toBe("0.000021988");
   });
 });
