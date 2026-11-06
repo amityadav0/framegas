@@ -232,6 +232,39 @@ The paymaster stakes 0.012 ETH in the ERC-8421 staking registry from its constru
 | `demo/` | Next.js console: replay from `docs/evidence/`, live through the SDK |
 | `scripts/` | `redeploy.sh` and the numbered scripts that reproduce each finding; `10-quota-live.ts` measures the quota |
 | `cre/` | Chainlink CRE workflow: mainnet vs devnet price divergence, see below |
+| `skill/` | Agent skill in the Uniswap AI format, with two eval cases |
+
+## MCP server and agent skill
+
+[`mcp/`](./mcp/src/server.ts) is a stdio MCP server over the SDK with three tools. Amounts are decimal strings in token units; addresses and calldata are checked against hex patterns in the schema.
+
+| Tool | Inputs | Returns | Sends? |
+| --- | --- | --- | --- |
+| `framegas_quote` | `payToken`, `calls[{to, data?}]` | `mode`, `requiredTokens`, `estimatedTokens`, `maxCostEth` | No |
+| `framegas_budget` | `payToken`, `calls?` | `balance`, `allowance`, `quota {active, limit, spent, remaining, resetsAtBlock}`, `canSendNow`, `transactionsLikeThisAffordable` | No |
+| `framegas_send` | `payToken`, `maxTokenCost`, `calls`, `compareMempools?` | `hash`, `explorerUrl`, `netCost`, per-frame gas, canonical mempool answer | Yes |
+
+Failures come back as `{ error: { code, message, details } }` with the SDK's codes (`CAP_TOO_LOW` carries `requiredTokens`, `QUOTA_EXCEEDED` carries `resetsAtBlock`).
+
+**Claude Desktop.** Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows), then restart Claude Desktop:
+
+```json
+{
+  "mcpServers": {
+    "framegas": {
+      "command": "/absolute/path/to/pnpm",
+      "args": ["--dir", "/absolute/path/to/framegas/mcp", "start"],
+      "env": {
+        "FRAMEGAS_PRIVATE_KEY": "0x… a devnet-only key holding fgUSD and no ETH"
+      }
+    }
+  }
+}
+```
+
+Claude Desktop does not inherit your shell's `PATH`, so use the output of `which pnpm`. `FRAMEGAS_DEPLOYMENTS` overrides the path to `deployments/devnet.json`. Never put a key that holds real funds here.
+
+**Skill.** [`skill/SKILL.md`](./skill/SKILL.md) follows the [Uniswap AI skills](https://github.com/Uniswap/uniswap-ai) format: when to use, prerequisites, step-by-step SDK and MCP calls, bootstrap and normal examples, and every SDK code and paymaster error with what it means. Two eval cases with expected behaviours are in [`skill/evals/`](./skill/evals/).
 
 ## Chainlink CRE workflow
 
