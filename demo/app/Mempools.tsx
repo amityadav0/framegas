@@ -46,7 +46,16 @@ export function Mempools({ run, strip }: { run: Run | null; strip: StripState })
         )}
       </div>
 
-      <Card title="Canonical mempool" verdict={sent && run?.canonical ? <Tag tone={run.canonical.admitted ? "ok" : "bad"}>{run.canonical.admitted ? "admitted" : "rejected"}</Tag> : waiting}>
+      {sent && run?.canonical && !run.canonical.admitted && run.alt.admitted && (
+        <div className="px-3 py-2 border-b border-line bg-ok-soft text-[11.5px] text-ok leading-snug">
+          Today's mempool refuses these bytes; the alt-mempool admits and mines them. FrameGas lives in that gap.
+        </div>
+      )}
+
+      <Card
+        title="Canonical mempool"
+        verdict={sent && run?.canonical ? run.canonical.admitted ? <Tag tone="ok">admitted</Tag> : <Tag>expected</Tag> : waiting}
+      >
         <table className="grid-table">
           <tbody>
             <tr>
@@ -56,11 +65,13 @@ export function Mempools({ run, strip }: { run: Run | null; strip: StripState })
           </tbody>
         </table>
         <div className="px-3 pb-3 pt-1">
-          <div className={`num text-[11.5px] leading-snug rounded-[3px] border px-2 py-1.5 break-words ${sent && run?.canonical && !run.canonical.admitted ? "border-bad/30 bg-bad-soft !text-bad" : "border-line bg-sunk !text-faint"}`}>
+          <div className={`num text-[11.5px] leading-snug rounded-[3px] border px-2 py-1.5 break-words ${sent && run?.canonical && !run.canonical.admitted ? "border-line-strong bg-sunk !text-muted" : "border-line bg-sunk !text-faint"}`}>
             {sent && run?.canonical ? <ErrorText text={run.canonical.message} /> : run && !run.canonical && sent ? "not compared for this transaction" : "—"}
           </div>
           {sent && run?.canonical && !run.canonical.admitted && (
-            <p className="text-[11px] text-muted mt-1.5">Validation reads the v4 PoolManager's storage, which is not the sender's. Canonical rules forbid that.</p>
+            <p className="text-[11px] text-muted mt-1.5">
+              Expected. Ethereum's mempool forbids validation that reads another contract's storage, and the paymaster reads the v4 pool's price. ERC-8421 relaxes that rule for staked contracts, which is why FrameGas runs on the alt-mempool.
+            </p>
           )}
         </div>
       </Card>
