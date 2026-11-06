@@ -1,119 +1,191 @@
 # FrameGas
 
-**The permissionless gas-payment layer for Ethereum.** Pay gas in any ERC-20 — natively, with no relayer, no sponsor treasury and no off-chain price signer.
+**Pay Ethereum gas in an ERC-20, from a wallet holding zero ETH, in one signed transaction.**
 
-FrameGas is a paymaster built on [EIP-8141](https://eips.ethereum.org/EIPS/eip-8141) frame transactions. Its validation frame reads the token's price from a Uniswap v4 pool, its execution frame pulls the token, swaps it on the same pool and pays gas — all in one atomic transaction admitted through the [ERC-8421 alternative mempool](https://docs.altmempool.wtf/).
+- FrameGas is a paymaster contract for [EIP-8141](https://eips.ethereum.org/EIPS/eip-8141) frame transactions. Its validation frame prices gas from a Uniswap v4 pool, and its execution frames buy the gas on that pool with the user's tokens.
+- Transactions enter through the [ERC-8421 alternative mempool](https://docs.altmempool.wtf/), which admits validation that reads the PoolManager's storage once the paymaster is staked. The canonical mempool refuses the same bytes.
+- No relayer, no sponsor treasury, no off-chain price signer, no owner. Built at ETHGlobal Mumbai, 5–7 Nov 2026, on the alt-mempool devnet (chain 1337). EIP-8141 is scheduled for the Hegotá fork and is not on mainnet.
 
-> Built at ETHGlobal Mumbai, 5–7 Nov 2026. Status: running on the alt-mempool devnet (chain 1337). EIP-8141 is scheduled for the Hegotá fork, so it cannot run on mainnet until then.
-
-## What it does
-
-```ts
-const framegas = createFrameGas({ privateKey, paymasters: { [fgUSD]: paymaster } });
-const { requiredTokens } = await framegas.quote({ payToken: fgUSD, calls });
-await framegas.send({ payToken: fgUSD, maxTokenCost: requiredTokens, calls });
-```
-
-One signature, one transaction. The user holds zero ETH, including on their first transaction. If gas would cost more than `maxTokenCost`, validation fails and nothing moves.
-
-On the devnet a typical transaction cost 1.38 fgUSD, about 1.04x its gas fee at the pool's price, and the user had to hold 1.63 fgUSD. A user's first transaction cost about 0.56 fgUSD more.
-
-## Design trade-offs
-
-- **Working capital, not a sponsor treasury.** `APPROVE` collects the transaction's maximum cost from the paymaster before any execution frame runs, so it must already hold ETH. Each transaction's swap is designed to refill what that transaction spent. Anyone can top the balance up, and no operator controls it.
-- **The stake is locked for good.** The paymaster has no owner, so nothing can call `unlockStake`. Stake is the price of reading pool state during validation.
-- **One paymaster per token and pool.** Fixing both at deployment stops anyone pointing the paymaster at a thin pool they control. A new token needs a new deployment and stake.
-- **A pool move can evict pending transactions.** Pending transactions that depend on a slot are revalidated when it changes, so a swap that moves the tick past `maxDeviation`, or the quote past a user's `maxTokenCost`, evicts them. `maxDeviation` is set wide (1,000 ticks, about 10.5%) so ordinary swaps do not.
-- **The reference tick can be dragged, slowly.** Validation cannot read the block number, so it compares the pool's tick with a tick in the paymaster's own storage. If the market moves past `maxDeviation`, validation fails until the reference catches up, so anyone can call `syncReference()`. It moves at most `maxDeviation` per block, which makes dragging it cost sustained capital.
-- **The user overpays slightly.** `APPROVE` reserves the maximum cost, and `settle` buys all of it with tokens. A final frame sells a conservative estimate of the unused ETH back for tokens, because the chain returns that ETH only after the last frame. In the measured transactions the user paid about 1.04x the fee and held 1.17x. Refunding is best effort: if the frame fails or is left out, the user forfeits the refund and the paymaster keeps it. The user never pays more than the signed `maxTokenCost`.
-- **The first transaction costs more.** A user with no allowance puts `approve(paymaster, n)` in a frame before settlement, in one transaction, with zero ETH and no relayer. Validation allows nothing else in that frame. The new allowance slot's state gas adds about 0.56 fgUSD, paid in tokens.
-- **Permits are supported but cannot run on the devnet yet.** Validation cannot read `TIMESTAMP`, so it can only check a permit with `deadline = type(uint256).max`, which the permit's value and nonce still bound. The devnet's sidecar also rejects every precompile call in validation (`precompiles: []`), against the rule texts, so `ecrecover` cannot run there. The contract implements the check, and it executes in simulation.
-- **The paymaster can lose gas when settlement fails.** A failed frame does not stop later ones, so the user's call would land for free. Validation rules out every failure the user controls alone. What remains is the price moving past the 5% buffer in the same block, a balance drained after admission, or a pool too thin for the swap. Each costs at most `MAX_TX_COST_WEI` per transaction, 0.002 ETH on the devnet. The cost of causing it grows with pool depth, so deploy on a deep pool. See [`docs/findings.md`](./docs/findings.md#worst-case-loss-per-transaction).
-- **Validation gas is shared.** The devnet caps the whole validation prefix at 100,000 gas, so the paymaster keeps its checks small. See [`docs/findings.md`](./docs/findings.md).
-
-## Layout
-
-| Path | What |
-| --- | --- |
-| `contracts/` | Foundry: `FrameGasPaymaster`, `FgUSD` (6 decimals, EIP-2612), unit tests and a whole-transaction fuzz suite |
-| `sdk/` | `@framegas/sdk`: simulates to find frame limits, then quotes, builds, signs and broadcasts |
-| `mcp/` | `@framegas/mcp`: `framegas_quote`, `framegas_send` and `framegas_budget` tools over the SDK |
-| `demo/` | Demo page, with a replay mode that runs from `docs/evidence/` when the devnet is down |
-| `scripts/` | `redeploy.sh` rebuilds the whole deployment, and the numbered scripts reproduce each finding |
-| `docs/` | [`findings.md`](./docs/findings.md) on the alt-mempool rules, and [`evidence/`](./docs/evidence/) |
-
-## Uniswap integration (for reviewers)
-
-| What | Where |
-| --- | --- |
-| Pool price read during validation (`StateLibrary.getSlot0` on the v4 PoolManager) | [`FrameGasPaymaster.sol:254`](./contracts/src/FrameGasPaymaster.sol#L254) |
-| Price to token cost, from `sqrtPriceX96` | [`FrameGasPaymaster.sol:512-516`](./contracts/src/FrameGasPaymaster.sol#L512-L516) |
-| Manipulation check against the reference tick | [`FrameGasPaymaster.sol:255-256`](./contracts/src/FrameGasPaymaster.sol#L255-L256) |
-| Minimum active liquidity (`getLiquidity`) | [`FrameGasPaymaster.sol:257-258`](./contracts/src/FrameGasPaymaster.sol#L257-L258) |
-| Settlement: `PoolManager.unlock` | [`FrameGasPaymaster.sol:293`](./contracts/src/FrameGasPaymaster.sol#L293) |
-| Exact-output swap, tokens for the ETH `APPROVE` collected | [`FrameGasPaymaster.sol:418-439`](./contracts/src/FrameGasPaymaster.sol#L418-L439) |
-| Paying the pool and taking ETH (`sync`, `transferFrom`, `settle`, `take`) | [`FrameGasPaymaster.sol:431-436`](./contracts/src/FrameGasPaymaster.sol#L431-L436) |
-| Refund: exact-input swap of surplus ETH back to tokens | [`FrameGasPaymaster.sol:441-458`](./contracts/src/FrameGasPaymaster.sol#L441-L458) |
-| Unlock callback | [`FrameGasPaymaster.sol:339-346`](./contracts/src/FrameGasPaymaster.sol#L339-L346) |
-| Reference tick, moved at most `maxDeviation` per block | [`FrameGasPaymaster.sol:352-355`](./contracts/src/FrameGasPaymaster.sol#L352-L355), [`FrameGasPaymaster.sol:481-492`](./contracts/src/FrameGasPaymaster.sol#L481-L492) |
-
-The pool is native ETH against the token, as mainnet's deepest v4 pools are, so there is no WETH wrapping. See [`FEEDBACK.md`](./FEEDBACK.md) for Uniswap developer feedback.
-
-## Alt-mempool integration (for reviewers)
-
-| What | Where |
-| --- | --- |
-| Validation entry point | [`FrameGasPaymaster.sol:242-278`](./contracts/src/FrameGasPaymaster.sol#L242-L278) |
-| The settle frame must follow validation, run unbatched, carry no ETH, have exact calldata and enough gas | [`FrameGasPaymaster.sol:365-382`](./contracts/src/FrameGasPaymaster.sol#L365-L382) |
-| Bootstrap check: the frame before settlement may only be `approve(paymaster, n)`, with `n` at least the cap | [`FrameGasPaymaster.sol:385-400`](./contracts/src/FrameGasPaymaster.sol#L385-L400) |
-| Per-transaction cost limit | [`FrameGasPaymaster.sol:250-251`](./contracts/src/FrameGasPaymaster.sol#L250-L251) |
-| Permit check, the path that needs `ecrecover` | [`FrameGasPaymaster.sol:403-415`](./contracts/src/FrameGasPaymaster.sol#L403-L415) |
-| Staking from the constructor, as the contract itself | [`FrameGasPaymaster.sol:232`](./contracts/src/FrameGasPaymaster.sol#L232) |
-| Refund, reading earlier frames' gas from `FRAMEPARAM` | [`FrameGasPaymaster.sol:301-336`](./contracts/src/FrameGasPaymaster.sol#L301-L336), [`FrameGasPaymaster.sol:461-478`](./contracts/src/FrameGasPaymaster.sol#L461-L478) |
-
-- The same signed transaction, refused by the canonical mempool and admitted by the alt-mempool: [`docs/evidence/`](./docs/evidence/README.md#the-same-signed-transaction-in-both-mempools)
-- Rule findings against the pinned draft and ERC-8421, griefing economics and worst-case loss: [`docs/findings.md`](./docs/findings.md)
-
-## Limitations
-
-- **Devnet only, until Hegotá.** EIP-8141 is not live on mainnet, so FrameGas cannot run there. The contracts target mainnet's native-ETH pools and real token behaviour so that only addresses change.
-- **The devnet's liquidity threshold is a demo value.** It accepts pools far thinner than production should: griefing stops being profitable at about 4 ETH of depth.
-- **Permits cannot run on the devnet.** Its sidecar rejects precompile calls in validation. Bootstrap mode covers the same case with an approve frame.
-- **Gas permits must not expire**, because validation cannot read the time.
-- **Tokens without EIP-2612 use bootstrap mode.** Permit2 is not supported yet.
-- **A first-ever tick crossing needs more state gas** than the floors validation enforces. The SDK finds it by simulating, but a client that declares only the floors will fail settlement, and the paymaster pays that transaction's gas.
-- **Stake cannot be withdrawn**, because the paymaster has no owner.
-- **The devnet is not dependable.** It stopped producing blocks on 2026-11-06, and some admitted transactions are never included. The demo can replay recorded evidence instead.
-
-## Run it
+## Quickstart
 
 ```sh
 pnpm install
-forge test --root contracts          # 73 tests, including the fuzz suite
-pnpm --filter @framegas/sdk test     # SDK unit tests against a fake chain
-scripts/redeploy.sh --fresh          # new token, pool, staked paymaster and smoke test on the devnet
-pnpm exec tsx scripts/08-sdk-live.ts # the SDK end to end on the devnet
+scripts/redeploy.sh --fresh              # token, pool, liquidity, staked paymaster, demo contracts, smoke test
+pnpm --filter @framegas/demo dev         # http://localhost:3000, replay mode needs no chain
 ```
 
-Deployment needs about 0.085 ETH of devnet ETH, which it cannot recover. The deployer key is generated into the git-ignored `.env` on first use.
+`redeploy.sh` generates a deployer key into the git-ignored `.env` and funds it from the devnet faucet. It locks about 0.085 ETH (0.33 ETH with `--seed-eth 0.3`) and writes [`deployments/devnet.json`](./deployments/devnet.json).
 
-**Demo page.** `pnpm --filter @framegas/demo dev`, then open <http://localhost:3000>. Replay mode needs nothing else: it steps through a user's first and second transactions as recorded in `docs/evidence/`, frame by frame, with both mempools' answers to the same signed bytes (← → to step, space to play). The quote each was validated against is recovered from pool logs by `scripts/09-replay-quotes.ts`. Live mode turns on when the devnet is producing blocks, the server has `FRAMEGAS_DEMO_KEY` (a devnet key holding the token and no ETH), and the deployment includes the demo's swap router and mock lending pool, which `redeploy.sh` deploys. Screenshots: [`docs/evidence/demo/`](./docs/evidence/demo/).
+One SDK call, from a key that holds the token and no ETH:
 
-**MCP server.** Add it to an MCP client:
+```ts
+import { createFrameGas } from "@framegas/sdk";
+import deployment from "./deployments/devnet.json";
 
-```json
-{
-  "mcpServers": {
-    "framegas": {
-      "command": "pnpm",
-      "args": ["--dir", "/path/to/framegas/mcp", "start"],
-      "env": { "FRAMEGAS_PRIVATE_KEY": "0x… devnet key" }
-    }
-  }
-}
+const framegas = createFrameGas({ privateKey, paymasters: deployment.paymasters });
+const { requiredTokens } = await framegas.quote({ payToken: deployment.fgUSD, calls });
+const r = await framegas.send({ payToken: deployment.fgUSD, maxTokenCost: (requiredTokens * 102n) / 100n, calls });
+// r.hash, r.explorerUrl, r.tokensPaid, r.tokensRefunded, r.frames
 ```
 
-It offers `framegas_quote`, `framegas_send` and `framegas_budget`. Amounts are in token units, and a failure comes back as a readable error with the amount needed where that applies.
+Tests: `forge test --root contracts` (77, including a whole-transaction fuzz suite), `pnpm --filter @framegas/sdk test`, `pnpm --filter @framegas/demo test`.
+
+## How it works
+
+```text
+ one signed frame transaction (type 0x06), sender holds 0 ETH
+ ┌────────────┬──────────────────────┬─────────────────────┬──────────────────────┬──────────────┬─────────────────┐
+ │ 0 VERIFY   │ 1 VERIFY             │ 2 SENDER            │ 3 SENDER             │ 4 SENDER     │ 5 SENDER        │
+ │ sender     │ paymaster.validate() │ token.approve(pm,n) │ paymaster.settle(    │ user call(s) │ paymaster       │
+ │ signature  │                      │ bootstrap only      │   maxTokenCost,v,r,s)│              │ .refund(settle) │
+ └────────────┴──────────────────────┴─────────────────────┴──────────────────────┴──────────────┴─────────────────┘
+   validation prefix (mempool rules, ≤100,000 gas)    │  execution frames
+                                                      │
+ validate():  getSlot0 + getLiquidity on the v4 pool  │  settle():  PoolManager.unlock → exact-output swap
+              tick within maxDeviation of refTick     │             token → ETH equal to APPROVE's max cost,
+              quote(max cost) ≤ maxTokenCost          │             sync / transferFrom / settle / take
+              balance and allowance ≥ maxTokenCost    │  refund():  exact-input swap of the unused ETH
+              frames 2–3 bound exactly                │             back to the user's token
+              APPROVE(PAYMENT): paymaster pays max    │  after last frame: chain returns unused max cost
+```
+
+`APPROVE` charges the paymaster the transaction's maximum cost before any execution frame runs. `settle` buys back exactly that much ETH from the pool with the user's tokens, never more than `maxTokenCost`. The chain returns the unused part after the last frame, so `refund` sells an estimate of it back to the user. Later frames run even if an earlier one fails, so `validate` rejects every settlement failure the user can cause alone.
+
+| Mode | When | Frames | Difference |
+| --- | --- | --- | --- |
+| Bootstrap | First transaction for a user and token: no allowance | verify, validate, approve, settle, call(s), refund | `validate` requires frame 2 to be exactly `PAY_TOKEN.approve(paymaster, n)`, `n ≥ maxTokenCost`, followed by settle. The new allowance slot costs 97,920 state gas, about 0.56 fgUSD |
+| Normal | Allowance already covers the cap | verify, validate, settle, call(s), refund | `validate` reads the allowance instead |
+
+A permit in the settle frame is a third mode. The contract implements it, but the devnet rejects `ecrecover` in validation ([finding 18](./docs/findings.md#rule-drift)).
+
+## Reviewer pointers
+
+All in [`contracts/src/FrameGasPaymaster.sol`](./contracts/src/FrameGasPaymaster.sol).
+
+| What | Where |
+| --- | --- |
+| `getSlot0` read in validation | [L254](./contracts/src/FrameGasPaymaster.sol#L254), quote from `sqrtPriceX96` [L260-261](./contracts/src/FrameGasPaymaster.sol#L260-L261), [L512-516](./contracts/src/FrameGasPaymaster.sol#L512-L516) |
+| Settle-frame binding check: target, `SENDER` mode, selector, not atomic, no value, 132-byte calldata, gas floors | call [L247-248](./contracts/src/FrameGasPaymaster.sol#L247-L248), check [L365-381](./contracts/src/FrameGasPaymaster.sol#L365-L381) |
+| Bootstrap approve-calldata check: `approve(this, n ≥ cap)`, 68 bytes, gas and state gas floors | detection [L244-245](./contracts/src/FrameGasPaymaster.sol#L244-L245), call [L267-269](./contracts/src/FrameGasPaymaster.sol#L267-L269), check [L385-400](./contracts/src/FrameGasPaymaster.sol#L385-L400) |
+| Min-liquidity check (`getLiquidity` against `MIN_LIQUIDITY`) | [L257-258](./contracts/src/FrameGasPaymaster.sol#L257-L258) |
+| Swap / settle / take | `unlock` [L293](./contracts/src/FrameGasPaymaster.sol#L293), callback [L339-346](./contracts/src/FrameGasPaymaster.sol#L339-L346), exact-output swap [L418-430](./contracts/src/FrameGasPaymaster.sol#L418-L430), `sync`, `transferFrom`, `settle`, `take` [L432-436](./contracts/src/FrameGasPaymaster.sol#L432-L436) |
+| Refund frame: last frame only, re-derives settlement from frame statuses, surplus from `FRAMEPARAM` | [L301-336](./contracts/src/FrameGasPaymaster.sol#L301-L336), surplus [L461-478](./contracts/src/FrameGasPaymaster.sol#L461-L478), exact-input swap [L441-457](./contracts/src/FrameGasPaymaster.sol#L441-L457) |
+| Reference tick + `syncReference` | state [L138-140](./contracts/src/FrameGasPaymaster.sol#L138-L140), check [L255-256](./contracts/src/FrameGasPaymaster.sol#L255-L256), advanced in settle [L294](./contracts/src/FrameGasPaymaster.sol#L294), `syncReference` [L352-355](./contracts/src/FrameGasPaymaster.sol#L352-L355), `_advanceReference` [L481-491](./contracts/src/FrameGasPaymaster.sol#L481-L491) |
+| `MAX_TX_COST_WEI` | declared [L128](./contracts/src/FrameGasPaymaster.sol#L128), check [L250-251](./contracts/src/FrameGasPaymaster.sol#L250-L251) |
+| Stake from the constructor, no owner | [L232](./contracts/src/FrameGasPaymaster.sol#L232) |
+
+## Gas per frame
+
+Measured on the devnet on 2026-11-05 at 2 gwei, one user's first and second transaction, each with one `transfer` call. Limit is what the signed transaction declared.
+
+**Bootstrap** — [`0x08a9…9bf7`](https://explorer.altmempool.wtf/tx/0x08a9d9386e14a428a3ba77a01719eec9be6f1fe7731608efa9d7140f974b9bf7), block 405098
+
+| # | Frame | Mode | Gas used / limit | State gas used / limit |
+| --- | --- | --- | --- | --- |
+| 0 | sender signature | VERIFY | 100 / 200 | 0 |
+| 1 | `validate` | VERIFY | 49,835 / 51,000 | 0 |
+| 2 | `approve` | SENDER | 14,472 / 30,000 | 97,920 / 97,920 |
+| 3 | `settle` | SENDER | 106,254 / 150,000 | 0 |
+| 4 | user call | SENDER | 15,074 / 16,000 | 0 |
+| 5 | `refund` | SENDER | 78,454 / 90,500 | 0 |
+| | Total | | 382,895 | fee 0.000766 ETH, user paid 1.938 fgUSD |
+
+**Normal** — [`0xbd24…88e7`](https://explorer.altmempool.wtf/tx/0xbd24f1a8c1aaa9fe667e5640de154c922ef18e55346808915b14fd0feb3b88e7), block 405103
+
+| # | Frame | Mode | Gas used / limit | State gas used / limit |
+| --- | --- | --- | --- | --- |
+| 0 | sender signature | VERIFY | 100 / 200 | 0 |
+| 1 | `validate` | VERIFY | 45,429 / 46,000 | 0 |
+| 2 | `settle` | SENDER | 116,190 / 150,000 | 0 |
+| 3 | user call | SENDER | 15,074 / 16,000 | 0 |
+| 4 | `refund` | SENDER | 73,946 / 85,000 | 0 |
+| | Total | | 270,466 | fee 0.000541 ETH, user paid 1.383 fgUSD |
+
+The validation prefix declares 51,200 (bootstrap) and 46,200 (normal) of the devnet's 100,000 cap, plus 2,800 for the signature. User paid 1.035x (bootstrap) and 1.044x (normal) of the fee; the paymaster ended +0.000024 and +0.000022 ETH. Floors and per-tick costs: [`docs/findings.md`](./docs/findings.md#what-validation-requires-of-a-transaction).
+
+## Evidence
+
+The devnet was reset on 2026-11-06, and its explorer keeps history in memory, so explorer links from 2026-11-05 no longer resolve. The JSON files in [`docs/evidence/`](./docs/evidence/README.md) hold the admission reports and receipts.
+
+| What | Transaction | Files |
+| --- | --- | --- |
+| Bootstrap, 24/24 checks | `0x08a9…9bf7`, block 405098 | `docs/evidence/bootstrap-0x08a9…{-summary.jpg,-frames.jpg,.json}` |
+| Normal, 24/24 checks | `0xbd24…88e7`, block 405103 | `docs/evidence/normal-0xbd24…{-summary.jpg,-frames.jpg,.json}` |
+| Same bytes to both mempools, bootstrap | `0x2b73…a331`, block 405263 | `docs/evidence/mempool-comparison-bootstrap-0x2b73…{.json,-summary.jpg}` |
+| Same bytes to both mempools, normal | `0x6e76…4ff7`, block 405268 | `docs/evidence/mempool-comparison-normal-0x6e76…{.json,-summary.jpg}` |
+| Staked paymaster reading PoolManager storage, 24/24 checks | `0xcafc…06af`, block 402821 | [`docs/findings.md`](./docs/findings.md#a-staked-contract-paymaster-reading-poolmanager-storage) |
+| Current chain, redeploy smoke test (bootstrap, all frames succeeded, 3.08 fgUSD) | [`0x4c45…7e4d`](https://explorer.altmempool.wtf/tx/0x4c45be67d7ad7682c1cac67a0f6d615cfb6779137258f048c6171a9fdf687e4d) | — |
+| Demo replay screenshots, both modes, light and dark | | [`docs/evidence/demo/`](./docs/evidence/demo/) |
+
+**Canonical rejection.** `eth_sendRawTransaction` with the signed bytes of `0x6e76…4ff7` returned:
+
+```text
+Invalid params: Frame transaction validation-prefix simulation failed: StorageReadNonSender
+```
+
+`eth_sendFrameTransaction` with the same bytes returned `admitted: true`, and the transaction was mined in block 405268. The `signedRawTx` field in each comparison file holds the bytes.
+
+## Findings index
+
+Full table, rule references and repro scripts: [`docs/findings.md`](./docs/findings.md).
+
+| # | Finding |
+| --- | --- |
+| 1 | Validation gas cap is a flat 100,000 across the whole prefix, staked entities included; ERC-8421 gives staked entities 1,000,000. 100,000 admitted, 100,001 rejected |
+| 2 | The cap counts declared limits, not gas used |
+| 3 | 500,000 state gas cap in validation, from the pinned draft only |
+| 4 | Admission reports use PR #6 rule names (`OP-*`, `COD-*`), not ERC-8421's |
+| 5 | Wider storage access goes to any staked role, not only paymasters and factories |
+| 6 | `minUnstakeDelay` is 0 on the devnet; both texts say 86,400 s |
+| 7 | `BALANCE` needs `stake > minStake` strictly; other carve-outs accept `>=` |
+| 8 | Same-sender pending limit is 4 |
+| 9 | `pre_verify` frames are recognised in the sidecar source, ahead of the pin |
+| 10 | A banned entity's rejection text does not mention the ban |
+| 11 | The v4 predeploys are present at all five documented addresses |
+| 12 | The documented WETH9/USDC example pool is not initialised |
+| 13 | Workshop docs it links to are missing from the repository |
+| 14 | An unstaked paymaster's rejection names its own slot before the PoolManager read |
+| 15 | `GAS` is on the banned list, yet Solidity external calls pass |
+| 16 | `ethrex_simulateFrameTransaction` returns different fields from its docs |
+| 17 | `TXPARAM` 0x06 (max cost) is in EIP-8141 and implemented |
+| 18 | All precompiles are rejected in validation (`precompiles: []`), so `ecrecover` and the permit path fail |
+| 19 | `FRAMEPARAM` 0x09–0x0B return state gas limit, gas used, state gas used; reading the current frame halts |
+| 20 | Transient storage does not survive between frames |
+| 21 | 97,920 state gas per new storage slot; execution gas cannot substitute |
+| 22 | A failed frame does not stop later frames |
+| 23 | The mempool admits transactions whose settlement will fail |
+| 24 | Some admitted transactions are never included |
+| 25 | Block production halted at block 408262 on 2026-11-06; the chain was later reset |
+| 26 | Explorer history was lost when the gateway restarted |
+| — | [Griefing economics](./docs/findings.md#griefing-economics): at 5e13 liquidity, moving the price 480 ticks costs 0.35 fgUSD in fees against a 1.11 fgUSD loss; unprofitable from about 7e14 (≈4 ETH depth) |
+| — | [First-ever tick crossing](./docs/findings.md#gas-by-ticks-crossed): needs 195,840 state gas; at the 0 floor, settlement failed and the paymaster lost 0.000466 ETH |
+| — | [Worst-case loss](./docs/findings.md#worst-case-loss-per-transaction): bounded by `MAX_TX_COST_WEI`, 0.002 ETH on the devnet; fuzzed over 10,000 runs |
+| — | [Griefing paths](./docs/findings.md#griefing-paths): 11 malformed transactions each rejected at admission with the exact contract error |
+
+## Limitations
+
+- **Devnet only.** EIP-8141 is not on mainnet until Hegotá. The devnet halts, resets, and leaves some admitted transactions unmined.
+- **Locked stake.** The paymaster has no owner, so nothing can call `unlockStake`. A new token needs a new deployment and new stake.
+- **Max-uint permit deadline.** Validation cannot read `TIMESTAMP`, so it only accepts permits with `deadline = type(uint256).max`. The permit's value and nonce bound it. Tokens without EIP-2612 use bootstrap mode; Permit2 is not built.
+- **Eviction.** A swap that moves the tick past `maxDeviation` (1,000 ticks), or the quote past a user's cap, evicts pending transactions that read that slot.
+- **Thin-pool loss bound.** If settlement fails after `APPROVE`, the user's call runs and the paymaster pays the fee, at most `MAX_TX_COST_WEI` per transaction. The devnet's `MIN_LIQUIDITY` is 1e12, a demo value; the production floor where griefing stops paying is about 7e14.
+- **Overpayment.** The user pays about 1.04x the fee, because `settle` buys the maximum cost and `refund` returns a conservative estimate.
+
+## Uniswap integration
+
+The pool is native ETH against the token, so there is no WETH wrapping. Validation reads `slot0` and `liquidity` through `StateLibrary` on the PoolManager singleton. Settlement opens `unlock`, swaps exact-output for the ETH `APPROVE` charged, and pays with `sync` / `transferFrom` / `settle` / `take`. The refund swaps exact-input. The demo's swap preset calls v4-core's `PoolSwapTest`. Line references are in [Reviewer pointers](#reviewer-pointers). Developer feedback: [`FEEDBACK.md`](./FEEDBACK.md).
+
+## Alt-mempool integration
+
+The paymaster stakes 0.012 ETH in the ERC-8421 staking registry from its constructor, as itself. The stake makes its validation-time read of the PoolManager's `slot0` admissible (PR #6 STO-033, ERC-8421 STORAGE-032); an unstaked probe doing the same read is rejected. Validation reads only `TXPARAM`, `FRAMEPARAM` and frame data, no environment opcodes, and keeps the prefix under the devnet's 100,000 gas cap. The SDK submits through `eth_sendFrameTransaction` and, with `compareMempools: true`, sends the same bytes to `eth_sendRawTransaction` and records the canonical rejection. Rule drift between the workshop's pinned draft, ERC-8421 and the devnet is in [`docs/findings.md`](./docs/findings.md).
+
+| Path | What |
+| --- | --- |
+| `contracts/` | Foundry: `FrameGasPaymaster`, `FgUSD`, demo `MockLendingPool`, unit and fuzz tests |
+| `sdk/` | `@framegas/sdk`: simulates for frame limits, quotes, builds, signs, submits |
+| `mcp/` | `@framegas/mcp`: `framegas_quote`, `framegas_send`, `framegas_budget` |
+| `demo/` | Next.js console: replay from `docs/evidence/`, live through the SDK |
+| `scripts/` | `redeploy.sh` and the numbered scripts that reproduce each finding |
 
 ## AI usage disclosure
 
