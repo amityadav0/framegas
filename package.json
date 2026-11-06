@@ -3,18 +3,27 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.0.0",
-  "engines": { "node": ">=20.12" },
+  "engines": {
+    "node": ">=20.12"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test:contracts": "forge test --root contracts"
+    "test:contracts": "forge test --root contracts",
+    "test": "pnpm -r test"
   },
   "dependencies": {
     "@forshtat/hegota-support": "0.0.1",
-    "viem": "^2.57.7"
+    "viem": "^2.57.7",
+    "@framegas/sdk": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }

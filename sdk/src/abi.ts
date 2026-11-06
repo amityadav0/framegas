@@ -1,0 +1,38 @@
+import { parseAbi } from "viem";
+
+/** The parts of FrameGasPaymaster the SDK uses. */
+export const paymasterAbi = parseAbi([
+  "function validate()",
+  "function settle(uint256 maxTokenCost, uint8 v, bytes32 r, bytes32 s)",
+  "function refund(uint256 settleFrame)",
+  "function quote(uint256 weiCost) view returns (uint256)",
+  "function MIN_SETTLE_GAS() view returns (uint256)",
+  "function MIN_SETTLE_STATE_GAS() view returns (uint256)",
+  "function MIN_APPROVE_GAS() view returns (uint256)",
+  "function MIN_APPROVE_STATE_GAS() view returns (uint256)",
+  "function MAX_TX_COST_WEI() view returns (uint256)",
+  "function REFUND_GAS_ESTIMATE() view returns (uint256)",
+  "function REFUND_GAS_PER_FRAME() view returns (uint256)",
+  "event Settled(address indexed user, uint256 tokensPaid, uint256 ethBought)",
+  "event Refunded(address indexed user, uint256 tokensReturned, uint256 ethSold)",
+  "error TickDeviated(int24 poolTick, int24 refTick)",
+  "error CostAboveCap(uint256 tokenCost, uint256 maxTokenCost)",
+  "error InsufficientBalance(uint256 balance, uint256 maxTokenCost)",
+  "error InsufficientAllowance(uint256 allowance, uint256 maxTokenCost)",
+  "error SettleNotBound()",
+  "error SettleInAtomicBatch()",
+  "error SettleGasTooLow(uint256 gasLimit, uint256 stateGasLimit)",
+  "error SettleMalformed()",
+  "error ApproveNotBound()",
+  "error ApproveGasTooLow(uint256 gasLimit, uint256 stateGasLimit)",
+  "error PermitWithBootstrap()",
+  "error PoolTooThin(uint128 liquidity, uint128 minLiquidity)",
+  "error MaxCostTooHigh(uint256 maxCost, uint256 limit)",
+  "error InvalidPermit()",
+]);
+
+export const erc20Abi = parseAbi([
+  "function approve(address spender, uint256 amount) returns (bool)",
+  "function allowance(address owner, address spender) view returns (uint256)",
+  "function balanceOf(address owner) view returns (uint256)",
+]);
