@@ -11,13 +11,13 @@
   "devnet": {
     "gatewayUrl": "https://altmempoolgateway.forshtat.com/rpc",
     "stateView": "0xd89a052862AaA34f0B6cc7f3B6a9D080584a43FB",
-    "poolId": "0x54078dc76392ab22ff5aa126186285a6c9809ac03f23da66e8452106533f9138",
-    "paymaster": "0x2fc9a3f25c65d38f83bdb128c23728cc5ef75af8",
+    "poolId": "0xdc866b8eab6d03669c0d5e2fcc61e8f75d60ab6f866d7455c2de8307ea6b9dfe",
+    "paymaster": "0xf1c8e7df904c5141fc4b5e4e5c2ec2d53784946f",
     "fallback": {
-      "sqrtPriceX96": "3760796882188133569559208",
-      "tick": -199120,
-      "block": 1057,
-      "source": "deployments/devnet.json pool, snapshot at block 1057"
+      "sqrtPriceX96": "3768873340903246273432717",
+      "tick": -199077,
+      "block": 2616,
+      "source": "deployments/devnet.json pool, snapshot at block 2616"
     }
   }
 }

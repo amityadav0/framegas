@@ -1,0 +1,87 @@
+# cre workflow simulate ./divergence -T staging-settings --non-interactive --trigger-index 0
+# CRE CLI v1.39.0, @chainlink/cre-sdk 1.23.0, 2026-11-06. Three runs: default config, alert threshold lowered to 0.5% (--config config.alert.json), gateway unreachable (--config config.gateway-down.json).
+
+########## run: default
+Initializing...
+Loading settings...
+! Using default private key for chain write simulation. To use your own key, set CRE_ETH_PRIVATE_KEY in your .env file or system environment.
+Checking RPC connectivity...
+Compiling workflow...
+✓ Workflow compiled
+✓ Simulation limits enabled
+  HTTP: req=120kb resp=250kb timeout=10s | ConfHTTP: req=125kb resp=500kb timeout=1m30s | Consensus obs=25kb | ChainWrite evm_report=50kb evm_gas=10000000 solana_report=265b solana_cu=300000 | WASM binary=100mb compressed=20mb
+  Binary hash: ba8d20a83875c23419c56b0c3b1d7fcebd1bf2aa0536d650ba785d8ea3b04c4f
+  Config hash: cc8f292cb5e0fc5a45f3f80b634be18ff3ff2bd08c3430f0e7c17e5f5febe767
+2026-11-06T16:20:46Z [SIMULATION] Simulator Initialized
+2026-11-06T16:20:46Z [SIMULATION] Running trigger trigger=cron-trigger@1.0.0
+2026-11-06T16:20:48Z [USER LOG] devnet: live at block 2618, 6s old
+2026-11-06T16:20:48Z [USER LOG] mainnet ETH/USDC: 2237.08 USDC, tick -199191 (finalized)
+2026-11-06T16:20:48Z [USER LOG] devnet ETH/fgUSD: 2262.89 fgUSD, tick -199077 (gateway, block 2618)
+2026-11-06T16:20:48Z [USER LOG] divergence: 1.15% (threshold 3.00%)
+2026-11-06T16:20:48Z [USER LOG] within bound: no action
+✓ Workflow Simulation Result:
+"{\"mainnetPrice\":\"2237.08\",\"devnetPrice\":\"2262.89\",\"mainnetTick\":-199191,\"devnetTick\":-199077,\"divergenceBps\":115,\"devnetSource\":\"gateway, block 2618\",\"alert\":false}"
+2026-11-06T16:20:48Z [SIMULATION] Execution finished signal received
+2026-11-06T16:20:48Z [SIMULATION] Skipping WorkflowEngineV2
+╭──────────────────────────────────────────────────────╮
+│ Simulation complete! Ready to deploy your workflow?  │
+│                                                      │
+│ Run cre account access to request deployment access. │
+╰──────────────────────────────────────────────────────╯
+
+########## run: alert
+Initializing...
+Loading settings...
+! Using default private key for chain write simulation. To use your own key, set CRE_ETH_PRIVATE_KEY in your .env file or system environment.
+Checking RPC connectivity...
+Compiling workflow...
+✓ Workflow compiled
+✓ Simulation limits enabled
+  HTTP: req=120kb resp=250kb timeout=10s | ConfHTTP: req=125kb resp=500kb timeout=1m30s | Consensus obs=25kb | ChainWrite evm_report=50kb evm_gas=10000000 solana_report=265b solana_cu=300000 | WASM binary=100mb compressed=20mb
+  Binary hash: ba8d20a83875c23419c56b0c3b1d7fcebd1bf2aa0536d650ba785d8ea3b04c4f
+  Config hash: 930f44b43868852feff7c49f3bb1f0098661b143403cb5ce589d3f83df3765ad
+2026-11-06T16:21:28Z [SIMULATION] Simulator Initialized
+2026-11-06T16:21:28Z [SIMULATION] Running trigger trigger=cron-trigger@1.0.0
+2026-11-06T16:21:29Z [USER LOG] devnet: live at block 2625, 5s old
+2026-11-06T16:21:29Z [USER LOG] mainnet ETH/USDC: 2237.08 USDC, tick -199191 (finalized)
+2026-11-06T16:21:29Z [USER LOG] devnet ETH/fgUSD: 2262.89 fgUSD, tick -199077 (gateway, block 2625)
+2026-11-06T16:21:29Z [USER LOG] divergence: 1.15% (threshold 0.50%)
+2026-11-06T16:21:29Z [USER LOG] ALERT: devnet price diverges 1.15% from mainnet
+2026-11-06T16:21:29Z [USER LOG] prepared write (mocked, not sent): {"chain":"devnet 1337","to":"0xf1c8e7df904c5141fc4b5e4e5c2ec2d53784946f","data":"0x06ed0b46","bound":{"lowTick":-199491,"highTick":-198891,"devnetTickInside":true}}
+✓ Workflow Simulation Result:
+"{\"mainnetPrice\":\"2237.08\",\"devnetPrice\":\"2262.89\",\"mainnetTick\":-199191,\"devnetTick\":-199077,\"divergenceBps\":115,\"devnetSource\":\"gateway, block 2625\",\"alert\":true,\"payload\":{\"chain\":\"devnet 1337\",\"to\":\"0xf1c8e7df904c5141fc4b5e4e5c2ec2d53784946f\",\"data\":\"0x06ed0b46\",\"bound\":{\"lowTick\":-199491,\"highTick\":-198891,\"devnetTickInside\":true}}}"
+2026-11-06T16:21:29Z [SIMULATION] Execution finished signal received
+2026-11-06T16:21:29Z [SIMULATION] Skipping WorkflowEngineV2
+╭──────────────────────────────────────────────────────╮
+│ Simulation complete! Ready to deploy your workflow?  │
+│                                                      │
+│ Run cre account access to request deployment access. │
+╰──────────────────────────────────────────────────────╯
+
+########## run: gateway-down
+Initializing...
+Loading settings...
+! Using default private key for chain write simulation. To use your own key, set CRE_ETH_PRIVATE_KEY in your .env file or system environment.
+Checking RPC connectivity...
+Compiling workflow...
+✓ Workflow compiled
+✓ Simulation limits enabled
+  HTTP: req=120kb resp=250kb timeout=10s | ConfHTTP: req=125kb resp=500kb timeout=1m30s | Consensus obs=25kb | ChainWrite evm_report=50kb evm_gas=10000000 solana_report=265b solana_cu=300000 | WASM binary=100mb compressed=20mb
+  Binary hash: ba8d20a83875c23419c56b0c3b1d7fcebd1bf2aa0536d650ba785d8ea3b04c4f
+  Config hash: 8f57adf6c447a478d7aedfa214f5f87388a9d7d072ce25ed4d5c3098afd6b0e3
+2026-11-06T16:21:34Z [SIMULATION] Simulator Initialized
+2026-11-06T16:21:34Z [SIMULATION] Running trigger trigger=cron-trigger@1.0.0
+2026-11-06T16:21:35Z [USER LOG] devnet: unavailable ([2]Unknown: Post "https://altmempoolgateway.invalid/rpc": dial tcp: lookup altmempoolgateway.invalid: no such host); using the snapshot from deployments/devnet.json pool, snapshot at block 2616 (block 2616)
+2026-11-06T16:21:35Z [USER LOG] mainnet ETH/USDC: 2237.08 USDC, tick -199191 (finalized)
+2026-11-06T16:21:35Z [USER LOG] devnet ETH/fgUSD: 2262.89 fgUSD, tick -199077 (fallback: deployments/devnet.json pool, snapshot at block 2616)
+2026-11-06T16:21:35Z [USER LOG] divergence: 1.15% (threshold 3.00%)
+2026-11-06T16:21:35Z [USER LOG] within bound: no action
+✓ Workflow Simulation Result:
+"{\"mainnetPrice\":\"2237.08\",\"devnetPrice\":\"2262.89\",\"mainnetTick\":-199191,\"devnetTick\":-199077,\"divergenceBps\":115,\"devnetSource\":\"fallback: deployments/devnet.json pool, snapshot at block 2616\",\"alert\":false}"
+2026-11-06T16:21:35Z [SIMULATION] Execution finished signal received
+2026-11-06T16:21:35Z [SIMULATION] Skipping WorkflowEngineV2
+╭──────────────────────────────────────────────────────╮
+│ Simulation complete! Ready to deploy your workflow?  │
+│                                                      │
+│ Run cre account access to request deployment access. │
+╰──────────────────────────────────────────────────────╯

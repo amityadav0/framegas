@@ -279,12 +279,12 @@ Claude Desktop does not inherit your shell's `PATH`, so use the output of `which
 3. Divergence between the two ETH prices. Above 3% it logs an alert and prepares the paymaster's `syncReference()` calldata with a tick bound of mainnet ± 300 ticks. The write is mocked: the payload is logged, nothing is sent. The paymaster has no on-chain setter for the bound.
 
 ```sh
-cd cre/divergence && bun install && bun run ../sync-config.ts
+cd cre/divergence && bun install && bun run ../sync-config.ts && cd ..
 cre login                                    # the CLI requires a CRE account, even to simulate
-cre workflow simulate ./divergence -R .. -T staging-settings --non-interactive --trigger-index 0 | tee ../simulation.log
+cre workflow simulate ./divergence -T staging-settings --non-interactive --trigger-index 0   # from cre/; add --config $PWD/divergence/config.alert.json for the alert path
 ```
 
-The simulation log goes to `cre/simulation.log`. It has not been recorded yet: CRE CLI v1.39.0 refuses `simulate` without a login.
+[`cre/simulation.log`](./cre/simulation.log) holds three runs from 2026-11-06 (CRE CLI v1.39.0): the default config (mainnet 2,237.08 USDC, devnet 2,262.89 fgUSD, divergence 1.15%, no action); the threshold lowered to 0.5% with [`config.alert.json`](./cre/divergence/config.alert.json), which fires the alert and logs the mocked `syncReference()` write to paymaster `0xf1c8…946f` (calldata `0x06ed0b46`, bound −199,491 to −198,891); and an unreachable gateway with [`config.gateway-down.json`](./cre/divergence/config.gateway-down.json), which falls back to the snapshot from `deployments/devnet.json`.
 
 ## AI usage disclosure
 
